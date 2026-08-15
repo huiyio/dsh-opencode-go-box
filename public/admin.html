@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light">
     <meta name="theme-color" content="#f4f5f1">
     <title>OpenCode Go Key 管理</title>
-    <link rel="stylesheet" href="/styles.css?v=auth-backup-1">
+    <link rel="stylesheet" href="/styles.css?v=auth-backup-2">
   </head>
   <body>
     <div class="app-shell">
@@ -63,11 +63,13 @@
             <h2 id="account-list-title" data-copy="accounts">账号</h2>
             <div class="account-list-tools">
               <span id="account-count" class="account-count">数量：0</span>
-              <button id="backup-button" class="icon-button compact-button" type="button" title="备份账号" aria-label="备份账号">
+              <button id="backup-button" class="command-button compact-command-button" type="button" title="备份账号" aria-label="备份账号">
                 <span aria-hidden="true">↓</span>
+                <span data-copy="backup">下载备份</span>
               </button>
-              <button id="restore-button" class="icon-button compact-button" type="button" title="恢复账号" aria-label="恢复账号">
+              <button id="restore-button" class="command-button secondary compact-command-button" type="button" title="恢复账号" aria-label="恢复账号">
                 <span aria-hidden="true">↑</span>
+                <span data-copy="restore">恢复备份</span>
               </button>
               <input id="restore-input" type="file" accept="application/json,.json" hidden>
               <form id="auto-refresh-form" class="auto-refresh-form">
@@ -140,6 +142,6 @@
       </form>
     </dialog>
 
-    <script type="module" src="/admin.js?v=auth-backup-1"></script>
+    <script type="module" src="/admin.js?v=auth-backup-2"></script>
   </body>
 </html>

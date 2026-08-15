@@ -514,6 +514,14 @@ h1 {
   font-size: 18px;
 }
 
+.compact-command-button {
+  min-height: 34px;
+  padding: 7px 11px;
+  gap: 6px;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
 .account-list {
   display: grid;
   grid-template-columns: minmax(130px, 0.85fr) minmax(240px, 1.2fr) minmax(90px, 0.45fr) max-content;
