@@ -6,6 +6,8 @@
 
 - **额度窗口**：5 小时滚动 / 每周 / 每月 三个窗口的已用百分比、套餐参考限额和重置时间；
 - **DSH 会话明细**：DeepSeek Harness 中每个使用 opencode-go 模型的会话的 token 用量，并可下钻到**每一次模型调用**（turn/step 级）；
+- **缓存统计**：会话累计、单会话、单次调用三个层级都展示**缓存读取（命中）/ 缓存写入**，并计算**缓存命中率**（缓存读取占全部输入的比例）；
+- **模型筛选**：按模型分组筛选会话（chips），查看每个模型的用量与缓存情况，并附**按模型汇总**对比表；
 - **底栏常驻挂件**：输入框下方一行实时额度（30s 轮询），按阈值自动变色。
 
 ## 功能特性
@@ -13,6 +15,8 @@
 - 设置侧边栏新增 **"OpenCode Go"** 栏目（`settings.section` 贡献），内含「额度」「DSH 会话明细」两个标签页
 - Host 端 Typert Remote `opencodeUsage`：`usage` / `dshUsage` / `dshSessionMessages` 三个方法
 - **DSH 会话明细完全基于 DeepSeek Harness 自身的会话日志**（每条 `assistant/message` 事件自带 token 记账），不依赖本机是否安装 OpenCode 客户端，任何 DSH 部署都能用
+- 缓存统计：`cacheReadTokens`（命中）/ `cacheWriteTokens`（写入）按会话、按调用展示；命中率 = 缓存读取 ÷（非缓存输入 + 缓存读取）
+- 模型筛选：会话按 `source.model` 分组，chips 一键筛选，筛选后累计卡片与列表同步收窄；全部模型时展示「按模型汇总」表（会话数 / 输入 / 缓存读取 / 缓存写入 / 输出 / 推理 / 命中率）
 - 底栏挂件（`conversation.composer.dock` 贡献）：`🟢 5h 22% · 每周 13% · 每月 13% · 重置 2h13m`，按 5 小时滚动窗口阈值变色（默认 <60% 绿 / 60–85% 橙 / ≥85% 红）
 - 前置校验：若 **设置 → 模型** 中未添加 opencode-go，或未找到 API key，会显示引导说明而非报错
 - API key 解析链：opencode-go provider 配置所声明的凭证引用（`apiKeyEnv`，通过 `llm` provider 目录动态发现）→ DSH 凭证层的常规引用 `OPENCODE_GO_API_KEY` → OpenCode 的 `auth.json`

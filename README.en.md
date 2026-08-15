@@ -6,6 +6,8 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) web-GUI pl
 
 - **Quota windows**: the subscription's three usage windows — **5-hour rolling / weekly / monthly** — with percent used, the reference plan limit, and reset time;
 - **DSH session details**: token usage of every DeepSeek Harness session that used an opencode-go model, drillable down to **every model call** (turn/step level);
+- **Cache stats**: cache read (hit) / cache write shown at the totals, per-session, and per-call levels, plus a **cache hit rate** (cache read as a share of total input);
+- **Model filter**: filter sessions by model (chips) to see each model's usage and cache behavior, plus a **by-model comparison table**;
 - **Composer dock widget**: a live one-line quota readout under the composer (30s polling) that changes color by threshold.
 
 ## Features
@@ -13,6 +15,8 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) web-GUI pl
 - Settings sidebar section **"OpenCode Go"** (a `settings.section` contribution) with two tabs: **Quota** and **DSH sessions**
 - Host-side Typert Remote `opencodeUsage` with three methods: `usage` / `dshUsage` / `dshSessionMessages`
 - **The DSH session details come entirely from DeepSeek Harness session logs** (every `assistant/message` event carries token accounting) — no local OpenCode client required, works on any DSH deployment
+- Cache stats: `cacheReadTokens` (hit) / `cacheWriteTokens` (write) per session and per call; hit rate = cache read ÷ (uncached input + cache read)
+- Model filter: sessions grouped by `source.model`, one-click chip filtering that narrows both the totals card and the list; the all-models view adds a **By model** table (sessions / input / cache read / cache write / output / reasoning / hit rate)
 - Composer dock widget (a `conversation.composer.dock` contribution): `🟢 5h 22% · Weekly 13% · Monthly 13% · resets 2h13m`, colored by the 5-hour rolling window thresholds (default: <60% green / 60–85% orange / ≥85% red)
 - Precondition check: if opencode-go is missing from **Settings → Models**, or no API key is found, it shows guidance instead of an error
 - API key resolution: the credential reference the opencode-go provider profile declares (`apiKeyEnv`, discovered through the `llm` provider directory), then the conventional `OPENCODE_GO_API_KEY` from the DSH credentials seam, then OpenCode's `auth.json`

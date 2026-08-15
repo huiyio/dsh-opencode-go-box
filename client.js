@@ -41,6 +41,7 @@ window.__ModuleLoader__.load({
       dshScanned: "已扫描最近 {n} 个会话",
       dshTotals: "累计",
       dshSessions: "会话列表",
+      dshSessionsShort: "会话",
       dshModel: "模型",
       dshTime: "时间",
       dshMsgs: "消息",
@@ -48,6 +49,11 @@ window.__ModuleLoader__.load({
       dshOut: "输出",
       dshReason: "推理",
       dshCache: "缓存",
+      dshCacheRead: "缓存读取",
+      dshCacheWrite: "缓存写入",
+      dshHitRate: "命中率",
+      dshAllModels: "全部模型",
+      dshByModel: "按模型汇总",
       dshExpand: "明细",
       dshCollapse: "收起",
       dshStepsTitle: "每次调用用量",
@@ -83,6 +89,7 @@ window.__ModuleLoader__.load({
       dshScanned: "Scanned the latest {n} sessions",
       dshTotals: "Totals",
       dshSessions: "Sessions",
+      dshSessionsShort: "Sessions",
       dshModel: "Model",
       dshTime: "Time",
       dshMsgs: "Msgs",
@@ -90,6 +97,11 @@ window.__ModuleLoader__.load({
       dshOut: "Output",
       dshReason: "Reasoning",
       dshCache: "Cache",
+      dshCacheRead: "Cache read",
+      dshCacheWrite: "Cache write",
+      dshHitRate: "Hit rate",
+      dshAllModels: "All models",
+      dshByModel: "By model",
       dshExpand: "Detail",
       dshCollapse: "Hide",
       dshStepsTitle: "Per-call usage",
@@ -192,9 +204,12 @@ window.__ModuleLoader__.load({
       td: { padding: "6px 8px", borderBottom: "1px solid var(--dsw-alias-border-l2)", color: colors.text2, verticalAlign: "top" },
       mono: { fontVariantNumeric: "tabular-nums" },
       stepList: { display: "flex", flexDirection: "column", gap: 2, maxHeight: 320, overflowY: "auto" },
-      stepRow: { display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12, color: colors.text2, padding: "3px 0" },
+      stepRow: { display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", fontSize: 12, color: colors.text2, padding: "3px 0" },
       dockWrap: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: colors.text2, padding: "0 2px" },
       dot: { width: 7, height: 7, borderRadius: 999, background: colors.muted, flexShrink: 0 },
+      chips: { display: "flex", flexWrap: "wrap", gap: 6 },
+      chip: { border: "1px solid var(--dsw-alias-border-l2)", background: "transparent", color: colors.text2, font: "inherit", fontSize: 12, cursor: "pointer", borderRadius: 999, padding: "3px 10px" },
+      chipActive: { color: colors.text, borderColor: "var(--dsw-alias-state-business-primary)", background: "var(--dsw-alias-bg-layer-1)" },
     };
 
     function fmtTime(iso) {
@@ -226,6 +241,40 @@ window.__ModuleLoader__.load({
       if (percent >= danger) return "danger";
       if (percent >= warn) return "warn";
       return "ok";
+    }
+
+    /**
+     * Cache hit rate: the share of total input (fresh + cached) served from
+     * cache. Returns null when there is no input at all.
+     */
+    function cacheHitRate(totals) {
+      if (!totals || typeof totals !== "object") return null;
+      const input = typeof totals.inputTokens === "number" ? totals.inputTokens : 0;
+      const cacheRead = typeof totals.cacheReadTokens === "number" ? totals.cacheReadTokens : 0;
+      const denom = input + cacheRead;
+      if (denom <= 0) return null;
+      return Math.round((cacheRead / denom) * 1000) / 10;
+    }
+
+    function fmtPct(rate) {
+      return rate === null ? "—" : String(rate) + "%";
+    }
+
+    function emptyTotals() {
+      return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0 };
+    }
+
+    function sumTotals(list) {
+      const acc = emptyTotals();
+      for (const item of list) {
+        const t = item && item.totals && typeof item.totals === "object" ? item.totals : {};
+        acc.inputTokens += typeof t.inputTokens === "number" ? t.inputTokens : 0;
+        acc.outputTokens += typeof t.outputTokens === "number" ? t.outputTokens : 0;
+        acc.cacheReadTokens += typeof t.cacheReadTokens === "number" ? t.cacheReadTokens : 0;
+        acc.cacheWriteTokens += typeof t.cacheWriteTokens === "number" ? t.cacheWriteTokens : 0;
+        acc.reasoningTokens += typeof t.reasoningTokens === "number" ? t.reasoningTokens : 0;
+      }
+      return acc;
     }
 
     function WindowCard(props) {
@@ -283,11 +332,13 @@ window.__ModuleLoader__.load({
     function DshPanel(props) {
       const { getApi, t } = props;
       const [state, setState] = React.useState({ kind: "loading" });
+      const [modelFilter, setModelFilter] = React.useState(null);
       const [expanded, setExpanded] = React.useState(null);
       const [detail, setDetail] = React.useState({ kind: "idle" });
 
       const load = React.useCallback(() => {
         setState({ kind: "loading" });
+        setModelFilter(null);
         setExpanded(null);
         setDetail({ kind: "idle" });
         Promise.resolve()
@@ -350,25 +401,95 @@ window.__ModuleLoader__.load({
           React.createElement("button", { style: styles.button, onClick: load }, t("refresh")),
         );
       }
-      const totals = value.totals || {};
       const fmt = (n) => (typeof n === "number" ? n.toLocaleString() : "0");
+
+      // Group sessions by model for the filter chips and the per-model table.
+      const modelCounts = new Map();
+      for (const session of sessions) {
+        const key = session.model || "?";
+        modelCounts.set(key, (modelCounts.get(key) || 0) + 1);
+      }
+      const models = [...modelCounts.entries()].sort((a, b) => b[1] - a[1]);
+      const visible = modelFilter === null ? sessions : sessions.filter((s) => (s.model || "?") === modelFilter);
+      const totals = modelFilter === null ? (value.totals || emptyTotals()) : sumTotals(visible);
+      const modelLabel = (key) => (key === "?" ? t("unknown") : key);
+
+      const totalsCard = React.createElement("div", { style: styles.card },
+        React.createElement("div", { style: styles.cardHead },
+          React.createElement("h3", { style: styles.cardName }, modelFilter === null ? t("dshTotals") : t("dshByModel") + ": " + modelLabel(modelFilter)),
+          React.createElement("p", { style: styles.cardMeta }, visible.length + " sessions"),
+        ),
+        React.createElement("div", { style: styles.row },
+          React.createElement("span", null, t("dshIn") + ": " + fmt(totals.inputTokens)),
+          React.createElement("span", null, t("dshOut") + ": " + fmt(totals.outputTokens)),
+          React.createElement("span", null, t("dshReason") + ": " + fmt(totals.reasoningTokens)),
+        ),
+        React.createElement("div", { style: styles.row },
+          React.createElement("span", null, t("dshCacheRead") + ": " + fmt(totals.cacheReadTokens)),
+          React.createElement("span", null, t("dshCacheWrite") + ": " + fmt(totals.cacheWriteTokens)),
+          React.createElement("span", null, t("dshHitRate") + ": " + fmtPct(cacheHitRate(totals))),
+        ),
+      );
+
+      const chips = React.createElement("div", { style: styles.chips },
+        React.createElement("button", {
+          key: "all",
+          style: { ...styles.chip, ...(modelFilter === null ? styles.chipActive : {}) },
+          onClick: () => setModelFilter(null),
+        }, t("dshAllModels") + " (" + sessions.length + ")"),
+        models.map(([model, count]) => React.createElement("button", {
+          key: model,
+          style: { ...styles.chip, ...(modelFilter === model ? styles.chipActive : {}) },
+          onClick: () => setModelFilter(model),
+        }, modelLabel(model) + " (" + count + ")")),
+      );
+
+      const overview = modelFilter !== null || models.length <= 1 ? null : React.createElement("div", { style: styles.card },
+        React.createElement("div", { style: styles.cardHead },
+          React.createElement("h3", { style: styles.cardName }, t("dshByModel")),
+        ),
+        React.createElement("table", { style: styles.table },
+          React.createElement("thead", null,
+            React.createElement("tr", null,
+              React.createElement("th", { style: styles.th }, t("dshModel")),
+              React.createElement("th", { style: styles.th }, t("dshSessionsShort")),
+              React.createElement("th", { style: styles.th }, t("dshIn")),
+              React.createElement("th", { style: styles.th }, t("dshCacheRead")),
+              React.createElement("th", { style: styles.th }, t("dshCacheWrite")),
+              React.createElement("th", { style: styles.th }, t("dshOut")),
+              React.createElement("th", { style: styles.th }, t("dshReason")),
+              React.createElement("th", { style: styles.th }, t("dshHitRate")),
+            ),
+          ),
+          React.createElement("tbody", null,
+            models.map(([model]) => {
+              const rows = sessions.filter((s) => (s.model || "?") === model);
+              const rowTotals = sumTotals(rows);
+              return React.createElement("tr", { key: model },
+                React.createElement("td", { style: styles.td }, modelLabel(model)),
+                React.createElement("td", { style: styles.td }, String(rows.length)),
+                React.createElement("td", { style: { ...styles.td, ...styles.mono } }, fmt(rowTotals.inputTokens)),
+                React.createElement("td", { style: { ...styles.td, ...styles.mono } }, fmt(rowTotals.cacheReadTokens)),
+                React.createElement("td", { style: { ...styles.td, ...styles.mono } }, fmt(rowTotals.cacheWriteTokens)),
+                React.createElement("td", { style: { ...styles.td, ...styles.mono } }, fmt(rowTotals.outputTokens)),
+                React.createElement("td", { style: { ...styles.td, ...styles.mono } }, fmt(rowTotals.reasoningTokens)),
+                React.createElement("td", { style: { ...styles.td, ...styles.mono } }, fmtPct(cacheHitRate(rowTotals))),
+              );
+            }),
+          ),
+        ),
+      );
+
       return React.createElement("div", { style: styles.wrap },
         React.createElement("p", { style: styles.hint }, t("dshHint")),
         React.createElement("p", { style: styles.hint }, t("dshScanned").replace("{n}", String(value.scanned ?? 0))),
-        React.createElement("div", { style: styles.card },
-          React.createElement("div", { style: styles.cardHead },
-            React.createElement("h3", { style: styles.cardName }, t("dshTotals")),
-            React.createElement("p", { style: styles.cardMeta }, sessions.length + " sessions"),
-          ),
-          React.createElement("div", { style: styles.row },
-            React.createElement("span", null, t("dshIn") + ": " + fmt(totals.inputTokens + (totals.cacheReadTokens || 0) + (totals.cacheWriteTokens || 0))),
-            React.createElement("span", null, t("dshOut") + ": " + fmt(totals.outputTokens)),
-            React.createElement("span", null, t("dshReason") + ": " + fmt(totals.reasoningTokens)),
-          ),
-        ),
+        chips,
+        totalsCard,
+        overview,
         React.createElement("h3", { style: styles.cardName }, t("dshSessions")),
-        sessions.map((session) => {
+        visible.map((session) => {
           const open = expanded === session.sessionId;
+          const sessionTotals = session.totals && typeof session.totals === "object" ? session.totals : emptyTotals();
           return React.createElement("div", { key: session.sessionId, style: styles.card },
             React.createElement("div", { style: styles.cardHead },
               React.createElement("h3", { style: styles.cardName }, session.title || session.sessionId.slice(0, 8)),
@@ -379,9 +500,14 @@ window.__ModuleLoader__.load({
               React.createElement("span", null, t("dshMsgs") + ": " + session.messageCount),
             ),
             React.createElement("div", { style: styles.row },
-              React.createElement("span", { style: styles.mono }, t("dshIn") + " " + fmt(session.totals.inputTokens + (session.totals.cacheReadTokens || 0) + (session.totals.cacheWriteTokens || 0))),
-              React.createElement("span", { style: styles.mono }, t("dshOut") + " " + fmt(session.totals.outputTokens)),
-              React.createElement("span", { style: styles.mono }, t("dshReason") + " " + fmt(session.totals.reasoningTokens)),
+              React.createElement("span", { style: styles.mono }, t("dshIn") + " " + fmt(sessionTotals.inputTokens)),
+              React.createElement("span", { style: styles.mono }, t("dshOut") + " " + fmt(sessionTotals.outputTokens)),
+              React.createElement("span", { style: styles.mono }, t("dshReason") + " " + fmt(sessionTotals.reasoningTokens)),
+            ),
+            React.createElement("div", { style: styles.row },
+              React.createElement("span", { style: styles.mono }, t("dshCacheRead") + " " + fmt(sessionTotals.cacheReadTokens)),
+              React.createElement("span", { style: styles.mono }, t("dshCacheWrite") + " " + fmt(sessionTotals.cacheWriteTokens)),
+              React.createElement("span", { style: styles.mono }, t("dshHitRate") + " " + fmtPct(cacheHitRate(sessionTotals))),
             ),
             React.createElement("button", { style: styles.button, onClick: () => toggle(session.sessionId) }, open ? t("dshCollapse") : t("dshExpand")),
             open ? React.createElement("div", null,
@@ -392,7 +518,7 @@ window.__ModuleLoader__.load({
                   React.createElement("div", { style: styles.stepList },
                     (detail.value && detail.value.steps ? detail.value.steps : []).map((step, index) => React.createElement("div", { key: index, style: styles.stepRow },
                       React.createElement("span", null, t("dshStepRow").replace("{turn}", step.turn).replace("{step}", step.step)),
-                      React.createElement("span", { style: styles.mono }, "in " + fmt(step.inputTokens) + " · out " + fmt(step.outputTokens) + " · r " + fmt(step.reasoningTokens)),
+                      React.createElement("span", { style: styles.mono }, "in " + fmt(step.inputTokens) + " · out " + fmt(step.outputTokens) + " · r " + fmt(step.reasoningTokens) + " · " + t("dshCacheRead") + " " + fmt(step.cacheReadTokens) + " · " + t("dshCacheWrite") + " " + fmt(step.cacheWriteTokens)),
                     )),
                   ),
                 ),

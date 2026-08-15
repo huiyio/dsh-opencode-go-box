@@ -1,6 +1,6 @@
 {
   "name": "dsh-opencode-go-usage",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "DeepSeek Harness plugin: query OpenCode Go subscription usage from the settings sidebar",
   "license": "MIT",
   "keywords": [
