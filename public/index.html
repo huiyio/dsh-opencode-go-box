@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light">
     <meta name="theme-color" content="#f4f5f1">
     <title>OpenCode Go 额度</title>
-    <link rel="stylesheet" href="/styles.css?v=auth-backup-1">
+    <link rel="stylesheet" href="/styles.css?v=ui-scale-1">
   </head>
   <body>
     <div class="app-shell">
@@ -20,14 +20,14 @@
             <button type="button" data-locale="zh" aria-pressed="true">中文</button>
             <button type="button" data-locale="en" aria-pressed="false">EN</button>
           </div>
-          <button id="logout-button" class="icon-button" type="button" title="退出登录" aria-label="退出登录">
-            <span aria-hidden="true">⇥</span>
+          <button id="logout-button" class="command-button header-command" type="button" title="退出登录" aria-label="退出登录">
+            <span data-copy="logout">退出登录</span>
           </button>
-          <a id="admin-link" class="icon-button" href="/admin?v=model-select-1" title="Key 管理" aria-label="Key 管理">
-            <span aria-hidden="true">⚙</span>
+          <a id="admin-link" class="command-button secondary header-command" href="/admin?v=model-select-1" title="Key 管理" aria-label="Key 管理">
+            <span data-copy="manageKeys">Key 管理</span>
           </a>
-          <button id="refresh-button" class="icon-button" type="button" title="刷新" aria-label="刷新">
-            <span aria-hidden="true">↻</span>
+          <button id="refresh-button" class="command-button secondary header-command" type="button" title="刷新" aria-label="刷新">
+            <span data-copy="refresh">刷新</span>
           </button>
         </div>
       </header>

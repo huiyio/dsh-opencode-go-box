@@ -362,6 +362,16 @@ h1 {
   cursor: pointer;
 }
 
+.header-command {
+  min-height: 40px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
 .command-button.secondary {
   color: var(--ink);
   border-color: var(--line);
@@ -886,10 +896,24 @@ footer {
 
   .topbar {
     min-height: 68px;
+    padding: 10px 0;
+    align-items: flex-start;
   }
 
   .brand-name {
     display: none;
+  }
+
+  .toolbar {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .header-command {
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: 12px;
   }
 
   main {
