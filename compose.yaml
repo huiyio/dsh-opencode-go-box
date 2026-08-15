@@ -1,0 +1,42 @@
+services:
+  opencode-go-balance:
+    build:
+      context: .
+    image: opencode-go-balance-web:local
+    container_name: opencode-go-balance
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      OPENCODE_GO_API_KEY: "${OPENCODE_GO_API_KEY:-}"
+      WEB_USERNAME: "${WEB_USERNAME:?Set WEB_USERNAME in .env}"
+      WEB_PASSWORD: "${WEB_PASSWORD:?Set WEB_PASSWORD in .env}"
+      KEY_ENCRYPTION_SECRET: "${KEY_ENCRYPTION_SECRET:?Set KEY_ENCRYPTION_SECRET in .env}"
+      DATA_DIR: /data
+      FETCH_TIMEOUT_MS: "${FETCH_TIMEOUT_MS:-15000}"
+      CACHE_TTL_MS: "${CACHE_TTL_MS:-30000}"
+      REFRESH_INTERVAL_MS: "${REFRESH_INTERVAL_MS:-30000}"
+      WARN_PERCENT: "${WARN_PERCENT:-60}"
+      DANGER_PERCENT: "${DANGER_PERCENT:-85}"
+      OPENCODE_USAGE_URL: "${OPENCODE_USAGE_URL:-https://opencode.ai/zen/go/v1/usage}"
+      OPENCODE_MODEL_TEST_URL: "${OPENCODE_MODEL_TEST_URL:-https://opencode.ai/zen/go/v1/chat/completions}"
+      OPENCODE_MODEL_LIST_URL: "${OPENCODE_MODEL_LIST_URL:-https://opencode.ai/zen/go/v1/models}"
+      OPENCODE_MODEL_TEST_MODEL: "${OPENCODE_MODEL_TEST_MODEL:-hy3}"
+    volumes:
+      - opencode-go-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  opencode-go-data:

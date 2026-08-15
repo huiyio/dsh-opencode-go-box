@@ -1,3 +1,9 @@
 *.tgz
 node_modules/
 *.zip
+.env
+*.log
+coverage/
+.DS_Store
+data/
+.local-runtime/

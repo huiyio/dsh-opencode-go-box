@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#f4f5f1">
+    <title>OpenCode Go Key 管理</title>
+    <link rel="stylesheet" href="/styles.css?v=admin-count-1">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="OpenCode Go">
+          <span class="brand-mark" aria-hidden="true">GO</span>
+          <span class="brand-name">OpenCode Go</span>
+        </a>
+        <div class="toolbar">
+          <div class="language-switch" role="group" aria-label="Language">
+            <button type="button" data-locale="zh" aria-pressed="true">中文</button>
+            <button type="button" data-locale="en" aria-pressed="false">EN</button>
+          </div>
+          <a id="dashboard-link" class="icon-button" href="/?v=model-select-1" title="返回看板" aria-label="返回看板">
+            <span aria-hidden="true">←</span>
+          </a>
+        </div>
+      </header>
+
+      <main class="admin-main">
+        <section class="admin-heading">
+          <div>
+            <p class="eyebrow" data-copy="eyebrow">账号管理</p>
+            <h1 data-copy="title">OpenCode Go Keys</h1>
+            <p data-copy="subtitle">添加和管理额度看板使用的账号</p>
+          </div>
+        </section>
+
+        <section id="admin-error" class="error-banner" role="alert" hidden>
+          <strong id="admin-error-title"></strong>
+          <span id="admin-error-message"></span>
+        </section>
+
+        <section class="form-panel" aria-labelledby="add-title">
+          <h2 id="add-title" data-copy="addTitle">添加 Key</h2>
+          <form id="add-form" class="key-form">
+            <div class="field">
+              <label for="account-label" data-copy="label">账号名称</label>
+              <input id="account-label" name="label" maxlength="80" autocomplete="off" required>
+            </div>
+            <div class="field">
+              <label for="account-key" data-copy="apiKey">API Key</label>
+              <input id="account-key" name="key" type="password" minlength="8" maxlength="512" autocomplete="new-password" spellcheck="false" required>
+            </div>
+            <button id="add-button" class="command-button" type="submit" data-copy="add">添加</button>
+          </form>
+        </section>
+
+        <section aria-labelledby="account-list-title">
+          <div class="account-list-heading">
+            <h2 id="account-list-title" data-copy="accounts">账号</h2>
+            <div class="account-list-tools">
+              <span id="account-count" class="account-count">数量：0</span>
+              <form id="auto-refresh-form" class="auto-refresh-form">
+                <label class="auto-refresh-toggle" for="auto-refresh-enabled">
+                  <input id="auto-refresh-enabled" type="checkbox" checked>
+                  <span data-copy="autoRefresh">自动刷新</span>
+                </label>
+                <div class="auto-refresh-fields">
+                  <input id="auto-refresh-value" type="number" min="10" max="1440" step="1" value="30" inputmode="numeric" aria-label="刷新间隔">
+                  <select id="auto-refresh-unit" aria-label="刷新间隔单位">
+                    <option value="seconds" data-copy="seconds">秒</option>
+                    <option value="minutes" data-copy="minutes">分钟</option>
+                  </select>
+                </div>
+              </form>
+              <button id="refresh-all" class="icon-button compact-button" type="button" title="刷新全部额度" aria-label="刷新全部额度">
+                <span aria-hidden="true">↻</span>
+              </button>
+            </div>
+          </div>
+          <div id="account-list" class="account-list" aria-live="polite"></div>
+        </section>
+      </main>
+
+      <footer>
+        <span>OpenCode Go</span>
+        <span data-copy="encrypted">AES-256-GCM 加密存储</span>
+      </footer>
+    </div>
+
+    <dialog id="edit-dialog">
+      <form id="edit-form" class="dialog-body">
+        <h2 data-copy="editTitle">编辑账号</h2>
+        <p id="edit-error" class="dialog-error" role="alert" hidden></p>
+        <div class="dialog-fields">
+          <div class="field">
+            <label for="edit-label" data-copy="label">账号名称</label>
+            <input id="edit-label" name="label" maxlength="80" autocomplete="off" required>
+          </div>
+          <div class="field">
+            <label for="edit-key" data-copy="replacementKey">替换 Key（留空则不修改）</label>
+            <input id="edit-key" name="key" type="password" maxlength="512" autocomplete="new-password" spellcheck="false">
+          </div>
+          <label class="checkbox-field">
+            <input id="edit-enabled" name="enabled" type="checkbox">
+            <span data-copy="enabled">启用</span>
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button id="edit-cancel" class="command-button secondary" type="button" data-copy="cancel">取消</button>
+          <button class="command-button" type="submit" data-copy="save">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="test-dialog">
+      <form id="test-form" class="dialog-body">
+        <h2 data-copy="testDialogTitle">选择测试模型</h2>
+        <p id="test-model-error" class="dialog-error" role="alert" hidden></p>
+        <div class="dialog-fields">
+          <div class="field">
+            <label for="test-model-select" data-copy="testModelLabel">模型</label>
+            <select id="test-model-select" required disabled></select>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button id="test-cancel" class="command-button secondary" type="button" data-copy="cancel">取消</button>
+          <button id="test-submit" class="command-button" type="submit" data-copy="startModelTest" disabled>开始测试</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/admin.js?v=admin-count-1"></script>
+  </body>
+</html>

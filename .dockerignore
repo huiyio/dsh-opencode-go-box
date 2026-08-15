@@ -1,0 +1,11 @@
+.git
+.gitignore
+.env
+node_modules
+test
+coverage
+*.log
+*.tgz
+*.zip
+README.en.md
+data

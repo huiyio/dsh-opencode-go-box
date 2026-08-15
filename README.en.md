@@ -1,105 +1,111 @@
-# dsh-opencode-go-usage
+# OpenCode Go Balance Web
 
 [中文](README.md) | English
 
-A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) web-GUI plugin for users connected to **OpenCode Go** models:
+A standalone Docker-ready multi-account OpenCode Go quota dashboard. It does not require DeepSeek Harness, Cordis, Typert, or a local OpenCode client.
 
-- **Quota windows**: the subscription's three usage windows — **5-hour rolling / weekly / monthly** — with percent used, the reference plan limit, and reset time;
-- **DSH session details**: token usage of every DeepSeek Harness session that used an opencode-go model, drillable down to **every model call** (turn/step level);
-- **Cache stats**: cache read (hit) / cache write shown at the totals, per-session, and per-call levels, plus a **cache hit rate** (cache read as a share of total input);
-- **Model filter**: filter sessions by model (chips) to see each model's usage and cache behavior, plus a **by-model comparison table**;
-- **Bilingual UI**: Chinese / English copy with a **one-click language switch** in the top-right of the panel (drives and persists the Settings → General → Language preference);
-- **Composer dock widget**: a live one-line quota readout under the composer (30s polling) that changes color by threshold.
+- Add, edit, disable, and delete multiple API keys at `/admin`
+- Select an account and inspect its 5-hour, weekly, and monthly quota
+- Store keys in an AES-256-GCM encrypted Docker volume
+- Keep plaintext keys out of browser responses, logs, and images
+- Isolate request caches per account
+- Show each enabled account's 5-hour, weekly, and monthly remaining quota in the admin list, with at most three concurrent upstream queries
 
-## Features
+The upstream API reports usage percentages rather than a monetary balance.
 
-- Settings sidebar section **"OpenCode Go"** (a `settings.section` contribution) with two tabs: **Quota** and **DSH sessions**
-- Host-side Typert Remote `opencodeUsage` with three methods: `usage` / `dshUsage` / `dshSessionMessages`
-- **The DSH session details come entirely from DeepSeek Harness session logs** (every `assistant/message` event carries token accounting) — no local OpenCode client required, works on any DSH deployment
-- Cache stats: `cacheReadTokens` (hit) / `cacheWriteTokens` (write) per session and per call; hit rate = cache read ÷ (uncached input + cache read)
-- Model filter: sessions grouped by `source.model`, one-click chip filtering that narrows both the totals card and the list; the all-models view adds a **By model** table (sessions / input / cache read / cache write / output / reasoning / hit rate)
-- Composer dock widget (a `conversation.composer.dock` contribution): `🟢 5h 22% · W 13% · M 13% · ↻ 2h13m` (W = weekly, M = monthly, ↻ = reset countdown; hover shows the full labels), colored by the 5-hour rolling window thresholds (default: <60% green / 60–85% orange / ≥85% red)
-- Precondition check: if opencode-go is missing from **Settings → Models**, or no API key is found, it shows guidance instead of an error
-- API key resolution: the credential reference the opencode-go provider profile declares (`apiKeyEnv`, discovered through the `llm` provider directory), then the conventional `OPENCODE_GO_API_KEY` from the DSH credentials seam, then OpenCode's `auth.json`
-
-## Install
+## Quick start
 
 ```sh
-dsh plugin --profile web add github:yascitom/dsh-opencode-go-box
+cp .env.example .env
+openssl rand -base64 48
 ```
 
-Or from a local source checkout:
+Set these values in `.env`:
+
+```env
+WEB_USERNAME=admin
+WEB_PASSWORD=replace-with-a-long-random-password
+KEY_ENCRYPTION_SECRET=paste-the-generated-random-value
+
+# Optional read-only environment account
+OPENCODE_GO_API_KEY=
+```
+
+Start the service:
 
 ```sh
-dsh plugin --profile web add file:/path/to/dsh-opencode-go-usage
+docker compose up -d --build
 ```
 
-The package declares `dsh.bundle.patch`, so `dsh plugin add` reconciles it into
-`dsh.profile.bundles` automatically — no manual `cordis.patch.yml` row needed.
-Restart `dsh web` so the host half and the served client bundle pick up the plugin.
-The plugin needs the standard web bundle composition (the `api-gateway` client
-Remote and the `settings.section` slot) — the default `dsh web` profile has both.
+- Dashboard: `http://your-server:3000/`
+- Key management: `http://your-server:3000/admin`
+
+The Compose stack stores `/data/keys.enc.json` in the `opencode-go-data` named volume. Do not change `KEY_ENCRYPTION_SECRET` after adding keys; an incorrect secret makes the encrypted store unreadable and startup fails closed.
+
+Clicking “Test model” first loads the official OpenCode Go model list. The selected model is sent a minimal request only after confirmation.
 
 ## Configuration
 
-Host-side tunables live on the plugin row (`id: opencode-go-usage`); override in
-`$DSH_HOME/profiles/web/cordis.patch.yml`:
-
-```yaml
-- id: opencode-go-usage
-  config:
-    baseUrl: https://opencode.ai/zen/go/v1/usage   # default
-    timeoutMs: 15000                                # default
-    warnPercent: 60                                 # default: orange at 60%+
-    dangerPercent: 85                               # default: red at 85%+
-    maxSessions: 30                                 # default: max sessions scanned for DSH details
-```
-
-| Key | Default | Meaning |
+| Variable | Default | Purpose |
 | --- | --- | --- |
-| `baseUrl` | `https://opencode.ai/zen/go/v1/usage` | The usage endpoint. |
-| `timeoutMs` | `15000` | Fetch timeout in milliseconds. |
-| `warnPercent` | `60` | 5-hour rolling percent at which the dock widget turns orange. |
-| `dangerPercent` | `85` | 5-hour rolling percent at which the dock widget turns red. |
-| `maxSessions` | `30` | Upper bound on recent sessions scanned for DSH session details. |
+| `WEB_USERNAME` | empty | Web login username; required for admin. |
+| `WEB_PASSWORD` | empty | Web login password; required for admin. |
+| `KEY_ENCRYPTION_SECRET` | empty | At least 32 characters; required for encrypted key management. |
+| `OPENCODE_GO_API_KEY` | empty | Optional read-only environment account. |
+| `DATA_DIR` | `/data` | Encrypted data directory. |
+| `PORT` | `3000` | Published host port. |
+| `OPENCODE_USAGE_URL` | official usage endpoint | Trusted upstream URL. |
+| `OPENCODE_MODEL_TEST_URL` | official model endpoint | Key test URL, defaulting to `/zen/go/v1/chat/completions`. |
+| `OPENCODE_MODEL_LIST_URL` | official model list | Model list loaded by the admin test dialog, defaulting to `/zen/go/v1/models`. |
+| `OPENCODE_MODEL_TEST_MODEL` | `hy3` | Compatibility fallback when no model is supplied; the normal admin flow lets the user choose a model. |
+| `FETCH_TIMEOUT_MS` | `15000` | Upstream timeout. |
+| `CACHE_TTL_MS` | `30000` | Successful per-account response cache. |
+| `REFRESH_INTERVAL_MS` | `30000` | Browser refresh interval, minimum 10 seconds. |
+| `WARN_PERCENT` | `60` | Used percentage warning threshold. |
+| `DANGER_PERCENT` | `85` | Used percentage danger threshold. |
 
-## The usage endpoint
+A custom `OPENCODE_USAGE_URL` receives every account's Bearer key and must be trusted.
 
-```http
-GET https://opencode.ai/zen/go/v1/usage
-Authorization: Bearer <API_KEY>
+## Endpoints
+
+```text
+GET    /                         Dashboard
+GET    /admin                    Key management
+GET    /api/accounts             Enabled account metadata
+GET    /api/usage?account=<id>   Selected account quota
+GET    /api/admin/accounts       All account metadata
+GET    /api/admin/models         Official models available in the test dialog
+POST   /api/admin/accounts       Add an account
+PATCH  /api/admin/accounts/<id>  Edit, replace key, enable, or disable
+DELETE /api/admin/accounts/<id>  Delete an account
+POST   /api/admin/accounts/<id>/test  Send a minimal request using the selected model
+GET    /healthz                  Health check
 ```
 
-`<API_KEY>` is the OpenCode Go key (`sk-opencode-…`) already stored when the
-model was connected. The endpoint returns:
+Key responses contain masked values only. Admin mutations require configured Basic Auth and accept JSON bodies up to 16 KiB.
 
-```json
-{
-  "usage": {
-    "rolling": { "status": "ok", "percent": 9,  "resetsAt": "…" },
-    "weekly":  { "status": "ok", "percent": 12, "resetsAt": "…" },
-    "monthly": { "status": "ok", "percent": 6,  "resetsAt": "…" }
-  }
-}
+## Backup
+
+Back up both the Docker volume's `keys.enc.json` and `KEY_ENCRYPTION_SECRET`. Neither item can recover the keys by itself. Store them separately and never commit either to Git.
+
+## Development
+
+Node.js 22 or newer is required. There are no third-party runtime dependencies.
+
+```sh
+npm test
+npm run check
 ```
 
-`percent` is 0–100; `resetsAt` is ISO-8601. The endpoint is not yet in OpenCode's public docs.
+For a persistent localhost-only preview, run:
 
-## Layout
+```powershell
+npm run preview
+```
 
-| File | Role |
-| --- | --- |
-| `index.js` | Host half — `OpencodeUsageGateway` (`TypertRemoteService`, service key `opencodeUsage`) |
-| `typert.host.js` | Hand-written Typert host manifest, registered via `exports["./typert"]` |
-| `client.js` | Browser bundle in `window.__ModuleLoader__.load` format — mounts the Remote, registers the section and the dock widget, renders the pages |
-| `cordis.patch.yml` | Bundle patch inserting the plugin row (`id: opencode-go-usage`) |
-| `package.json` | Dual-face declaration: `main` + `exports["./client"]` + `exports["./typert"]` + `dsh.client` + `dsh.bundle` |
+The first run creates random credentials and an encryption secret under the Git-ignored `.local-runtime` directory, preserving admin accounts across restarts. It listens only on `127.0.0.1:57726` and is not a replacement for the production Docker deployment.
 
-## Known limitations
-
-- The usage endpoint is undocumented and may change; parsing is defensive, and non-200 responses surface as a friendly status rather than a crash.
-- Quota limits ($12 / $30 / $60) are shown for context only and are not part of the response; they follow the OpenCode Go plan and can drift.
-- DSH session details report token accounting from DSH session logs (no cost amounts) and only cover conversations inside DeepSeek Harness.
+Use HTTPS before public exposure because Basic Auth does not encrypt credentials over plain HTTP. The container runs as a non-root user with a read-only root filesystem; only `/data` is writable. The OpenCode Go usage endpoint is undocumented and may change.
 
 ## License
 

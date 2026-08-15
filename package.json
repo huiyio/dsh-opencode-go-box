@@ -1,57 +1,17 @@
 {
-  "name": "dsh-opencode-go-usage",
-  "version": "0.3.1",
-  "description": "DeepSeek Harness plugin: query OpenCode Go subscription usage from the settings sidebar",
+  "name": "opencode-go-balance-web",
+  "version": "1.0.0",
+  "description": "Standalone Docker-ready OpenCode Go usage dashboard",
   "license": "MIT",
-  "keywords": [
-    "deepseek-harness",
-    "dsh",
-    "plugin",
-    "opencode",
-    "opencode-go",
-    "usage",
-    "quota"
-  ],
+  "private": true,
   "type": "module",
-  "main": "./index.js",
-  "files": [
-    "index.js",
-    "client.js",
-    "typert.host.js",
-    "cordis.patch.yml",
-    "README.md",
-    "README.en.md",
-    "LICENSE"
-  ],
-  "exports": {
-    ".": "./index.js",
-    "./client": "./client.js",
-    "./typert": "./typert.host.js",
-    "./package.json": "./package.json"
+  "engines": {
+    "node": ">=22.0.0"
   },
-  "dsh": {
-    "client": {
-      "inject": [
-        "@deepseek-ai/dsh-api-remotes",
-        "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-client-ui-settings",
-        "@deepseek-ai/dsh-client-locale"
-      ],
-      "platform": "web"
-    },
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    }
-  },
-  "dependencies": {
-    "zod": "^4.4.3"
-  },
-  "peerDependencies": {
-    "react": "^18.2.0",
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/schemastery": "^3.18.1",
-    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-credentials": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-settings": "^0.1.0-rc.6"
+  "scripts": {
+    "start": "node server.js",
+    "preview": "node scripts/start-local-preview.js",
+    "test": "node --test",
+    "check": "node --check server.js && node --check scripts/start-local-preview.js && node --check src/config.js && node --check src/key-store.js && node --check src/account-service.js && node --check src/usage-service.js && node --check src/model-test-service.js && node --check src/http-server.js && node --check public/app.js && node --check public/admin.js"
   }
 }

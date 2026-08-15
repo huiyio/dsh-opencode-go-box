@@ -1,103 +1,160 @@
-# dsh-opencode-go-usage
+# OpenCode Go Balance Web
 
 中文 | [English](README.en.md)
 
-一个 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web-GUI 插件，为接入 **OpenCode Go** 模型的用户提供完整用量观测：
+一个完全独立、可用 Docker 部署的 OpenCode Go 多账号额度看板。不依赖 DeepSeek Harness、Cordis、Typert 或本机 OpenCode 客户端。
 
-- **额度窗口**：5 小时滚动 / 每周 / 每月 三个窗口的已用百分比、套餐参考限额和重置时间；
-- **DSH 会话明细**：DeepSeek Harness 中每个使用 opencode-go 模型的会话的 token 用量，并可下钻到**每一次模型调用**（turn/step 级）；
-- **缓存统计**：会话累计、单会话、单次调用三个层级都展示**缓存读取（命中）/ 缓存写入**，并计算**缓存命中率**（缓存读取占全部输入的比例）；
-- **模型筛选**：按模型分组筛选会话（chips），查看每个模型的用量与缓存情况，并附**按模型汇总**对比表；
-- **双语界面**：内置中文 / English 两套文案，面板右上角可**一键切换语言**（与「设置 → 通用 → 语言」联动并持久化）；
-- **底栏常驻挂件**：输入框下方一行实时额度（30s 轮询），按阈值自动变色。
+- 在 `/admin` 后台添加、编辑、启停和删除多个 API Key
+- 前台按账号查看 5 小时、每周、每月用量和剩余百分比
+- Key 使用 AES-256-GCM 加密后保存到 Docker 数据卷
+- Key 明文不会返回浏览器、写入日志或落入镜像
+- 每个账号独立缓存，支持手动刷新和中英文界面
 
-## 功能特性
+> OpenCode Go 接口返回的是用量百分比，不是货币余额。本项目不会使用固定套餐金额推算余额。
 
-- 设置侧边栏新增 **"OpenCode Go"** 栏目（`settings.section` 贡献），内含「额度」「DSH 会话明细」两个标签页
-- Host 端 Typert Remote `opencodeUsage`：`usage` / `dshUsage` / `dshSessionMessages` 三个方法
-- **DSH 会话明细完全基于 DeepSeek Harness 自身的会话日志**（每条 `assistant/message` 事件自带 token 记账），不依赖本机是否安装 OpenCode 客户端，任何 DSH 部署都能用
-- 缓存统计：`cacheReadTokens`（命中）/ `cacheWriteTokens`（写入）按会话、按调用展示；命中率 = 缓存读取 ÷（非缓存输入 + 缓存读取）
-- 模型筛选：会话按 `source.model` 分组，chips 一键筛选，筛选后累计卡片与列表同步收窄；全部模型时展示「按模型汇总」表（会话数 / 输入 / 缓存读取 / 缓存写入 / 输出 / 推理 / 命中率）
-- 底栏挂件（`conversation.composer.dock` 贡献）：`🟢 5h 22% · W 13% · M 13% · ↻ 2h13m`（W=每周、M=每月、↻=重置倒计时，悬停显示完整文字），按 5 小时滚动窗口阈值变色（默认 <60% 绿 / 60–85% 橙 / ≥85% 红）
-- 前置校验：若 **设置 → 模型** 中未添加 opencode-go，或未找到 API key，会显示引导说明而非报错
-- API key 解析链：opencode-go provider 配置所声明的凭证引用（`apiKeyEnv`，通过 `llm` provider 目录动态发现）→ DSH 凭证层的常规引用 `OPENCODE_GO_API_KEY` → OpenCode 的 `auth.json`
+## 快速部署
 
-## 安装
+创建配置文件：
 
 ```sh
-dsh plugin --profile web add github:yascitom/dsh-opencode-go-box
+cp .env.example .env
 ```
 
-或从本地源码目录安装：
+生成加密主密钥：
 
 ```sh
-dsh plugin --profile web add file:/path/to/dsh-opencode-go-usage
+openssl rand -base64 48
 ```
 
-本包声明了 `dsh.bundle.patch`，因此 `dsh plugin add` 会自动将其 reconcile 进
-`dsh.profile.bundles` —— 无需手动修改 `cordis.patch.yml`。
-安装后请重启 `dsh web`，让 Host 半部与托管的 Client bundle 生效。
-该插件依赖标准 web bundle 组合（`api-gateway` Client Remote 与 `settings.section` slot）——默认的 `dsh web` profile 均包含。
+填写 `.env`：
 
-## 配置
+```env
+WEB_USERNAME=admin
+WEB_PASSWORD=replace-with-a-long-random-password
+KEY_ENCRYPTION_SECRET=粘贴上面生成的随机值
 
-Host 端可调项位于插件行（`id: opencode-go-usage`）；在
-`$DSH_HOME/profiles/web/cordis.patch.yml` 中覆盖：
-
-```yaml
-- id: opencode-go-usage
-  config:
-    baseUrl: https://opencode.ai/zen/go/v1/usage   # 默认值
-    timeoutMs: 15000                                # 默认值
-    warnPercent: 60                                 # 默认值：≥60% 变橙
-    dangerPercent: 85                               # 默认值：≥85% 变红
-    maxSessions: 30                                 # 默认值：DSH 明细最多扫描的会话数
+# 可选：保留一个由环境变量管理、后台不可编辑的账号
+OPENCODE_GO_API_KEY=
 ```
 
-| 键 | 默认值 | 含义 |
+启动：
+
+```sh
+docker compose up -d --build
+```
+
+访问地址：
+
+- 看板：`http://服务器地址:3000/`
+- Key 管理：`http://服务器地址:3000/admin`
+
+Compose 会创建 `opencode-go-data` 命名卷，保存 `/data/keys.enc.json`。
+
+## Windows 生成主密钥
+
+PowerShell：
+
+```powershell
+[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+```
+
+`KEY_ENCRYPTION_SECRET` 至少需要 32 个字符。添加 Key 后不要直接更换它，否则已有密文无法解密，服务会拒绝启动。
+
+## 多账号行为
+
+- 后台添加账号时只需填写显示名称和 API Key。
+- 后台账号行直接显示每个 Key 的 5 小时、每周和每月剩余百分比；最多并发查询 3 个账号。
+- 账号列表仅显示掩码，例如 `••••••••abcd`。
+- 停用账号后，前台不再显示该账号，但加密数据仍保留。
+- 替换 Key 会立即清除该账号的内存缓存。
+- 点击“测试模型”后会先从 OpenCode Go 官方模型列表加载可选模型；选择模型并确认后，服务才会向该模型发送最小请求验证 Key。
+- 环境变量 `OPENCODE_GO_API_KEY` 会显示为 `Environment key`，不能从后台修改或删除。
+- 前台只查询当前选择的账号，不会因账号很多而同时请求所有 Key。
+
+## 环境变量
+
+| 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `baseUrl` | `https://opencode.ai/zen/go/v1/usage` | 用量查询接口地址。 |
-| `timeoutMs` | `15000` | 请求超时时间（毫秒）。 |
-| `warnPercent` | `60` | 5 小时滚动窗口达到该百分比后挂件变橙。 |
-| `dangerPercent` | `85` | 5 小时滚动窗口达到该百分比后挂件变红。 |
-| `maxSessions` | `30` | DSH 会话明细扫描的最近会话数上限。 |
+| `WEB_USERNAME` | 空 | Web 登录用户名；启用后台必需。 |
+| `WEB_PASSWORD` | 空 | Web 登录密码；启用后台必需。 |
+| `KEY_ENCRYPTION_SECRET` | 空 | Key 存储主密钥，至少 32 字符；启用后台必需。 |
+| `OPENCODE_GO_API_KEY` | 空 | 可选的只读兼容账号。 |
+| `DATA_DIR` | `/data` | 加密数据目录。 |
+| `PORT` | `3000` | 宿主机映射端口；容器内固定监听 3000。 |
+| `OPENCODE_USAGE_URL` | 官方用量接口 | 上游地址，一般无需修改。 |
+| `OPENCODE_MODEL_TEST_URL` | 官方模型接口 | Key 测试请求地址，默认 `/zen/go/v1/chat/completions`。 |
+| `OPENCODE_MODEL_LIST_URL` | 官方模型列表 | 后台测试弹窗使用的模型列表地址，默认 `/zen/go/v1/models`。 |
+| `OPENCODE_MODEL_TEST_MODEL` | `hy3` | 未提供模型时的兼容默认值；正常后台流程会由用户在弹窗中选择模型。 |
+| `FETCH_TIMEOUT_MS` | `15000` | 上游请求超时。 |
+| `CACHE_TTL_MS` | `30000` | 每个账号的成功响应缓存时间。 |
+| `REFRESH_INTERVAL_MS` | `30000` | 浏览器自动刷新间隔，最小 10 秒。 |
+| `WARN_PERCENT` | `60` | 已用比例达到该值时显示警告。 |
+| `DANGER_PERCENT` | `85` | 已用比例达到该值时显示危险。 |
 
-## 用量接口
+自定义 `OPENCODE_USAGE_URL` 会接收所有账号的 Bearer API Key，只能指向可信服务。
 
-```http
-GET https://opencode.ai/zen/go/v1/usage
-Authorization: Bearer <API_KEY>
+## HTTP 接口
+
+```text
+GET    /                         Web 看板
+GET    /admin                    Key 管理后台
+GET    /api/accounts             可用账号元数据
+GET    /api/usage?account=<id>   指定账号额度
+GET    /api/admin/accounts       全部账号元数据
+GET    /api/admin/models         测试弹窗可选的官方模型列表
+POST   /api/admin/accounts       添加账号
+PATCH  /api/admin/accounts/<id>  编辑、换 Key 或启停
+DELETE /api/admin/accounts/<id>  删除账号
+POST   /api/admin/accounts/<id>/test  按所选模型发送最小请求测试 Key
+GET    /healthz                  容器健康检查
 ```
 
-`<API_KEY>` 即接入模型时已存储的 OpenCode Go key（`sk-opencode-…`）。接口返回：
+所有 Key 相关响应只包含掩码。后台写接口要求 Basic Auth 已配置，且只接受最大 16 KiB 的 JSON 请求。
 
-```json
-{
-  "usage": {
-    "rolling": { "status": "ok", "percent": 9,  "resetsAt": "…" },
-    "weekly":  { "status": "ok", "percent": 12, "resetsAt": "…" },
-    "monthly": { "status": "ok", "percent": 6,  "resetsAt": "…" }
-  }
-}
+## 备份与恢复
+
+查看数据卷：
+
+```sh
+docker volume inspect opencode-go-box_opencode-go-data
 ```
 
-`percent` 取值 0–100；`resetsAt` 为 ISO-8601 时间。该接口尚未出现在 OpenCode 的公开文档中。
+备份时必须同时保存：
 
-## 目录结构
+1. Docker 卷中的 `keys.enc.json`
+2. `.env` 中的 `KEY_ENCRYPTION_SECRET`
 
-| 文件 | 作用 |
-| --- | --- |
-| `index.js` | Host 半部 —— `OpencodeUsageGateway`（`TypertRemoteService`，服务键 `opencodeUsage`） |
-| `typert.host.js` | 手写 Typert Host 清单，通过 `exports["./typert"]` 注册 |
-| `client.js` | `window.__ModuleLoader__.load` 格式的浏览器 bundle —— 挂载 Remote、注册栏目与底栏挂件、渲染页面 |
-| `cordis.patch.yml` | Bundle patch，插入插件行（`id: opencode-go-usage`） |
-| `package.json` | 双面声明：`main` + `exports["./client"]` + `exports["./typert"]` + `dsh.client` + `dsh.bundle` |
+缺少其中任何一个都无法恢复 Key。不要将二者存放在同一个公开位置，也不要提交到 Git。
 
-## 已知限制
+## 本地开发
 
-- 用量接口未公开文档，可能变更；解析做了防御性处理，非 200 响应会以友好状态提示而非崩溃。
-- 限额（$12 / $30 / $60）仅作展示参考，并非接口返回内容；它们随 OpenCode Go 套餐而定，可能漂移。
-- DSH 会话明细统计的是 DSH 会话日志中的 token 记账（不含花费金额），只覆盖 DeepSeek Harness 内的对话。
+需要 Node.js 22 或更高版本，无第三方运行时依赖：
+
+```sh
+npm test
+npm run check
+WEB_USERNAME=admin \
+WEB_PASSWORD=test-password \
+KEY_ENCRYPTION_SECRET=a-development-secret-with-at-least-32-characters \
+npm start
+```
+
+仅本机持久预览可运行：
+
+```powershell
+npm run preview
+```
+
+首次运行会在 Git 忽略的 `.local-runtime` 中生成随机认证和加密密钥，后续重启会保留后台账号。预览只监听 `127.0.0.1:57726`，不代替正式 Docker 部署。
+
+## 安全与限制
+
+- 公网部署必须使用 HTTPS；Basic Auth 在纯 HTTP 下不会加密传输密码。
+- 镜像以非 root 用户运行；Compose 启用只读根文件系统、丢弃 capabilities 并禁止提权，只有 `/data` 卷可写。
+- Key 使用 scrypt 派生密钥及 AES-256-GCM 认证加密；数据文件被篡改或主密钥错误时会失败关闭。
+- `/healthz` 无需认证，只返回服务状态、是否存在账号、后台是否启用和运行时间。
+- OpenCode Go 用量接口尚未公开文档，接口格式或地址未来可能变化。
+- 只保存 Key 和账号元数据，不记录历史额度；容器重启后用量缓存会清空。
 
 ## License
 
