@@ -39,6 +39,8 @@ const usageResultSchema = z.object({
 const stepUsageSchema = z.object({
   turn: z.number(),
   step: z.number(),
+  time: z.number().nullable(),
+  model: z.string().nullable(),
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
@@ -64,7 +66,6 @@ const sessionUsageSchema = z.object({
   createdAt: z.string(),
   messageCount: z.number(),
   totals: sessionTotalsSchema,
-  steps: z.array(stepUsageSchema),
 });
 
 const dshUsageResultSchema = z.object({
@@ -84,6 +85,7 @@ const dshSessionMessagesResultSchema = z.object({
   model: z.string().nullable(),
   provider: z.string().nullable(),
   createdAt: z.string().nullable(),
+  stepCount: z.number(),
   steps: z.array(stepUsageSchema),
 });
 

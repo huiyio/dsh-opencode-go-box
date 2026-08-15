@@ -44,10 +44,11 @@ window.__ModuleLoader__.load({
       dshSessionsShort: "会话",
       dshModel: "模型",
       dshTime: "时间",
-      dshMsgs: "消息",
+      dshMsgs: "调用",
       dshIn: "输入",
       dshOut: "输出",
       dshReason: "推理",
+      dshReasonFolded: "opencode-go 由 pi-ai 适配器接入，推理 token 未单独上报（已并入「输出」统计），故显示为 —。",
       dshCache: "缓存",
       dshCacheRead: "缓存读取",
       dshCacheWrite: "缓存写入",
@@ -57,6 +58,7 @@ window.__ModuleLoader__.load({
       dshExpand: "明细",
       dshCollapse: "收起",
       dshStepsTitle: "每次调用用量",
+      dshStepTotal: "共 {n} 次调用",
       dshStepRow: "第 {turn} 轮 · 第 {step} 步",
       dshStepCapped: "仅显示最近 400 次调用",
       dockNotConfigured: "OpenCode Go 未配置",
@@ -92,10 +94,11 @@ window.__ModuleLoader__.load({
       dshSessionsShort: "Sessions",
       dshModel: "Model",
       dshTime: "Time",
-      dshMsgs: "Msgs",
+      dshMsgs: "Calls",
       dshIn: "Input",
       dshOut: "Output",
       dshReason: "Reasoning",
+      dshReasonFolded: "opencode-go is served through the pi-ai adapter, which does not report reasoning tokens separately (they are folded into Output) — shown as —.",
       dshCache: "Cache",
       dshCacheRead: "Cache read",
       dshCacheWrite: "Cache write",
@@ -105,6 +108,7 @@ window.__ModuleLoader__.load({
       dshExpand: "Detail",
       dshCollapse: "Hide",
       dshStepsTitle: "Per-call usage",
+      dshStepTotal: "{n} calls",
       dshStepRow: "Turn {turn} · Step {step}",
       dshStepCapped: "Showing the latest 400 calls only",
       dockNotConfigured: "OpenCode Go not configured",
@@ -264,6 +268,25 @@ window.__ModuleLoader__.load({
       return rate === null ? "—" : String(rate) + "%";
     }
 
+    // Reasoning tokens: some adapters (pi-ai behind opencode-go) fold
+    // reasoning into outputTokens and never record a separate count, so an
+    // absent/zero value means "not reported", not "no reasoning". Render it
+    // as an em dash instead of a misleading 0.
+    function fmtReason(n) {
+      return typeof n === "number" && n > 0 ? n.toLocaleString() : "—";
+    }
+
+    function fmtClock(ms) {
+      if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) return "";
+      try {
+        const d = new Date(ms);
+        if (Number.isNaN(d.getTime())) return "";
+        return d.toLocaleTimeString();
+      } catch (e) {
+        return "";
+      }
+    }
+
     function emptyTotals() {
       return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0 };
     }
@@ -360,6 +383,9 @@ window.__ModuleLoader__.load({
 
       React.useEffect(() => { load(); }, [load]);
 
+      // Detail state is keyed by sessionId: a late response for a session
+      // that is no longer expanded can never render its steps under another
+      // session's card.
       const toggle = (sessionId) => {
         if (expanded === sessionId) {
           setExpanded(null);
@@ -367,18 +393,18 @@ window.__ModuleLoader__.load({
           return;
         }
         setExpanded(sessionId);
-        setDetail({ kind: "loading" });
+        setDetail({ kind: "loading", sessionId });
         Promise.resolve()
           .then(() => getApi())
           .then((api) => api.dshSessionMessages(sessionId))
           .then((result) => {
             if (!result || result.ok === false) {
-              setDetail({ kind: "failed", message: (result && result.error && result.error.message) || "remote failed" });
+              setDetail({ kind: "failed", sessionId, message: (result && result.error && result.error.message) || "remote failed" });
               return;
             }
-            setDetail({ kind: "done", value: result.value });
+            setDetail({ kind: "done", sessionId, value: result.value });
           })
-          .catch((e) => setDetail({ kind: "failed", message: String((e && e.message) || e) }));
+          .catch((e) => setDetail({ kind: "failed", sessionId, message: String((e && e.message) || e) }));
       };
 
       if (state.kind === "loading") {
@@ -417,6 +443,9 @@ window.__ModuleLoader__.load({
       const visible = modelFilter === null ? sessions : sessions.filter((s) => (s.model || "?") === modelFilter);
       const totals = modelFilter === null ? (value.totals || emptyTotals()) : sumTotals(visible);
       const modelLabel = (key) => (key === "?" ? t("unknown") : key);
+      // True when NO visible session recorded any reasoning tokens — almost
+      // always the pi-ai fold-into-output case, so explain the em dashes.
+      const noReasoningData = visible.every((s) => !(s.totals && typeof s.totals.reasoningTokens === "number" && s.totals.reasoningTokens > 0));
 
       const totalsCard = React.createElement("div", { style: styles.card },
         React.createElement("div", { style: styles.cardHead },
@@ -426,7 +455,7 @@ window.__ModuleLoader__.load({
         React.createElement("div", { style: styles.row },
           React.createElement("span", null, t("dshIn") + ": " + fmt(totals.inputTokens)),
           React.createElement("span", null, t("dshOut") + ": " + fmt(totals.outputTokens)),
-          React.createElement("span", null, t("dshReason") + ": " + fmt(totals.reasoningTokens)),
+          React.createElement("span", null, t("dshReason") + ": " + fmtReason(totals.reasoningTokens)),
         ),
         React.createElement("div", { style: styles.row },
           React.createElement("span", null, t("dshCacheRead") + ": " + fmt(totals.cacheReadTokens)),
@@ -476,7 +505,7 @@ window.__ModuleLoader__.load({
                 React.createElement("td", { style: { ...styles.td, ...styles.mono } }, fmt(rowTotals.cacheReadTokens)),
                 React.createElement("td", { style: { ...styles.td, ...styles.mono } }, fmt(rowTotals.cacheWriteTokens)),
                 React.createElement("td", { style: { ...styles.td, ...styles.mono } }, fmt(rowTotals.outputTokens)),
-                React.createElement("td", { style: { ...styles.td, ...styles.mono } }, fmt(rowTotals.reasoningTokens)),
+                React.createElement("td", { style: { ...styles.td, ...styles.mono } }, fmtReason(rowTotals.reasoningTokens)),
                 React.createElement("td", { style: { ...styles.td, ...styles.mono } }, fmtPct(cacheHitRate(rowTotals))),
               );
             }),
@@ -487,6 +516,7 @@ window.__ModuleLoader__.load({
       return React.createElement("div", { style: styles.wrap },
         React.createElement("p", { style: styles.hint }, t("dshHint")),
         React.createElement("p", { style: styles.hint }, t("dshScanned").replace("{n}", String(value.scanned ?? 0))),
+        noReasoningData ? React.createElement("p", { style: styles.hint }, t("dshReasonFolded")) : null,
         chips,
         totalsCard,
         overview,
@@ -497,7 +527,7 @@ window.__ModuleLoader__.load({
           return React.createElement("div", { key: session.sessionId, style: styles.card },
             React.createElement("div", { style: styles.cardHead },
               React.createElement("h3", { style: styles.cardName }, session.title || session.sessionId.slice(0, 8)),
-              React.createElement("p", { style: styles.cardMeta }, (session.model || "?") + (session.variant ? "/" + session.variant : "")),
+              React.createElement("p", { style: styles.cardMeta }, session.model || "?"),
             ),
             React.createElement("div", { style: styles.row },
               React.createElement("span", null, t("dshTime") + ": " + fmtTime(session.createdAt)),
@@ -506,7 +536,7 @@ window.__ModuleLoader__.load({
             React.createElement("div", { style: styles.row },
               React.createElement("span", { style: styles.mono }, t("dshIn") + " " + fmt(sessionTotals.inputTokens)),
               React.createElement("span", { style: styles.mono }, t("dshOut") + " " + fmt(sessionTotals.outputTokens)),
-              React.createElement("span", { style: styles.mono }, t("dshReason") + " " + fmt(sessionTotals.reasoningTokens)),
+              React.createElement("span", { style: styles.mono }, t("dshReason") + " " + fmtReason(sessionTotals.reasoningTokens)),
             ),
             React.createElement("div", { style: styles.row },
               React.createElement("span", { style: styles.mono }, t("dshCacheRead") + " " + fmt(sessionTotals.cacheReadTokens)),
@@ -515,14 +545,22 @@ window.__ModuleLoader__.load({
             ),
             React.createElement("button", { style: styles.button, onClick: () => toggle(session.sessionId) }, open ? t("dshCollapse") : t("dshExpand")),
             open ? React.createElement("div", null,
-              detail.kind === "loading" ? React.createElement("p", { style: styles.hint }, t("loading"))
+              detail.sessionId !== session.sessionId || detail.kind === "loading" ? React.createElement("p", { style: styles.hint }, t("loading"))
                 : detail.kind === "failed" ? React.createElement("p", { style: styles.error }, t("dshFailed") + detail.message)
                 : React.createElement("div", null,
-                  React.createElement("p", { style: styles.cardMeta }, t("dshStepsTitle") + (detail.value && detail.value.steps && detail.value.steps.length >= 400 ? " · " + t("dshStepCapped") : "")),
+                  React.createElement("p", { style: styles.cardMeta },
+                    t("dshStepsTitle")
+                      + (detail.value && typeof detail.value.stepCount === "number" ? " · " + t("dshStepTotal").replace("{n}", String(detail.value.stepCount)) : "")
+                      + (detail.value && typeof detail.value.stepCount === "number" && detail.value.steps && detail.value.stepCount > detail.value.steps.length ? " · " + t("dshStepCapped") : ""),
+                  ),
                   React.createElement("div", { style: styles.stepList },
                     (detail.value && detail.value.steps ? detail.value.steps : []).map((step, index) => React.createElement("div", { key: index, style: styles.stepRow },
-                      React.createElement("span", null, t("dshStepRow").replace("{turn}", step.turn).replace("{step}", step.step)),
-                      React.createElement("span", { style: styles.mono }, "in " + fmt(step.inputTokens) + " · out " + fmt(step.outputTokens) + " · r " + fmt(step.reasoningTokens) + " · " + t("dshCacheRead") + " " + fmt(step.cacheReadTokens) + " · " + t("dshCacheWrite") + " " + fmt(step.cacheWriteTokens)),
+                      React.createElement("span", null,
+                        t("dshStepRow").replace("{turn}", step.turn).replace("{step}", step.step)
+                          + (step.time ? " · " + fmtClock(step.time) : "")
+                          + (step.model && step.model !== session.model ? " · " + step.model : ""),
+                      ),
+                      React.createElement("span", { style: styles.mono }, "in " + fmt(step.inputTokens) + " · out " + fmt(step.outputTokens) + " · r " + fmtReason(step.reasoningTokens) + " · " + t("dshCacheRead") + " " + fmt(step.cacheReadTokens) + " · " + t("dshCacheWrite") + " " + fmt(step.cacheWriteTokens)),
                     )),
                   ),
                 ),

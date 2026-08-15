@@ -137,6 +137,15 @@ function pickWindow(w) {
  * session matches when at least one step is attributed to opencode-go, or
  * when no usage was recorded at all but the latest header route is
  * opencode-go (model selected, nothing billed yet).
+ *
+ * `steps` keeps the LATEST MAX_STEPS_PER_SESSION calls (a sliding tail), so
+ * the detail view shows the most recent activity of long sessions; totals
+ * and messageCount always cover every matched step. The latest
+ * `session/title` event is folded locally from the same events, sparing a
+ * second corpus read per session. `reasoningTokens` is reported as recorded:
+ * the pi-ai adapter behind opencode-go folds reasoning into outputTokens, so
+ * it is normally absent (shown as "—" by the client); adapters that do
+ * report a reasoning breakdown flow through unchanged.
  */
 function foldSessionLog(sessionId, createdAt, events) {
   let headerProvider = null;
@@ -144,6 +153,7 @@ function foldSessionLog(sessionId, createdAt, events) {
   let matchedModel = null;
   let sawAnyUsage = false;
   let messageCount = 0;
+  let title = null;
   const totals = {
     inputTokens: 0,
     outputTokens: 0,
@@ -156,6 +166,11 @@ function foldSessionLog(sessionId, createdAt, events) {
     if (event === null || typeof event !== "object") continue;
     const data = event.data;
     if (data === null || typeof data !== "object") continue;
+    if (event.type === "session/title") {
+      const text = asString(data.title);
+      if (text !== undefined) title = text;
+      continue;
+    }
     if (event.type === "request/header") {
       const config = data.header && typeof data.header === "object" ? data.header.config : undefined;
       if (config && typeof config === "object") {
@@ -178,6 +193,8 @@ function foldSessionLog(sessionId, createdAt, events) {
     const step = {
       turn: typeof data.turn === "number" ? data.turn : 0,
       step: typeof data.step === "number" ? data.step : 0,
+      time: typeof event.time === "number" && Number.isFinite(event.time) && event.time > 0 ? event.time : null,
+      model: stepModel,
       inputTokens: Number(usage.inputTokens) || 0,
       outputTokens: Number(usage.outputTokens) || 0,
       cacheReadTokens: Number(usage.cacheReadTokens) || 0,
@@ -191,7 +208,8 @@ function foldSessionLog(sessionId, createdAt, events) {
     totals.cacheReadTokens += step.cacheReadTokens;
     totals.cacheWriteTokens += step.cacheWriteTokens;
     totals.reasoningTokens += step.reasoningTokens;
-    if (steps.length < MAX_STEPS_PER_SESSION) steps.push(step);
+    steps.push(step);
+    if (steps.length > MAX_STEPS_PER_SESSION) steps.shift();
   }
   const matched = messageCount > 0 || (!sawAnyUsage && headerProvider === PROVIDER_ID);
   return {
@@ -200,6 +218,7 @@ function foldSessionLog(sessionId, createdAt, events) {
     model: matchedModel ?? (matched ? headerModel : null),
     createdAt: new Date(typeof createdAt === "number" && createdAt > 0 ? createdAt : Date.now()).toISOString(),
     messageCount,
+    title,
     totals,
     steps,
   };
@@ -343,18 +362,19 @@ export class OpencodeUsageGateway extends TypertRemoteService {
       const snapshot = await query.readSession(record.header.id);
       const fold = foldSessionLog(record.header.id, record.header.createdAt || 0, snapshot.events || []);
       if (fold.provider !== PROVIDER_ID) return null;
-      let title = null;
-      try {
-        const titleSnapshot = await query.readTitle(record.header.id);
-        title = titleSnapshot && typeof titleSnapshot.title === "string" ? titleSnapshot.title : null;
-      } catch {
-        /* title is best-effort */
-      }
       return {
-        ...fold,
-        title,
+        sessionId: fold.sessionId,
+        title: fold.title,
         cwd: asString(record.header.cwd) ?? null,
         agentPreset: asString(record.header.agentPreset) ?? null,
+        provider: fold.provider,
+        model: fold.model,
+        createdAt: fold.createdAt,
+        messageCount: fold.messageCount,
+        totals: fold.totals,
+        // Per-step rows are deliberately NOT part of the list payload (up to
+        // 400 entries per session); the detail view fetches them on demand
+        // through dshSessionMessages.
       };
     });
     const sessions = folded.filter((session) => session !== null);
@@ -384,7 +404,7 @@ export class OpencodeUsageGateway extends TypertRemoteService {
   async dshSessionMessages(sessionId) {
     const id = typeof sessionId === "string" && sessionId.length > 0 ? sessionId : undefined;
     if (id === undefined) {
-      return { ok: false, error: "missing-session", message: "缺少会话 ID。", sessionId: null, model: null, steps: [] };
+      return { ok: false, error: "missing-session", message: "缺少会话 ID。", sessionId: null, model: null, provider: null, createdAt: null, stepCount: 0, steps: [] };
     }
     try {
       const snapshot = await this.ctx.sessionQuery.readSession(id);
@@ -397,6 +417,7 @@ export class OpencodeUsageGateway extends TypertRemoteService {
         model: folded.model,
         provider: folded.provider,
         createdAt: folded.createdAt,
+        stepCount: folded.messageCount,
         steps: folded.steps,
       };
     } catch (error) {
@@ -406,6 +427,9 @@ export class OpencodeUsageGateway extends TypertRemoteService {
         message: "读取会话明细失败：" + String(error && error.message ? error.message : error),
         sessionId: id,
         model: null,
+        provider: null,
+        createdAt: null,
+        stepCount: 0,
         steps: [],
       };
     }
