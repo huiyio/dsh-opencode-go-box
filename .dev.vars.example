@@ -1,0 +1,4 @@
+WEB_USERNAME=admin
+WEB_PASSWORD=replace-with-a-strong-password
+KEY_ENCRYPTION_SECRET=replace-with-at-least-32-random-characters
+# OPENCODE_GO_API_KEY=optional-read-only-environment-key

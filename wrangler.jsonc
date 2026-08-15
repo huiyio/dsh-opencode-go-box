@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "opencode-go-balance-web",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-08-15",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "opencode-go-balance",
+      "database_id": "cc8a802a-e9fa-412f-a05a-22c95603cfed",
+      "migrations_dir": "worker/migrations"
+    }
+  ],
+  "vars": {
+    "OPENCODE_USAGE_URL": "https://opencode.ai/zen/go/v1/usage",
+    "OPENCODE_MODEL_TEST_URL": "https://opencode.ai/zen/go/v1/chat/completions",
+    "OPENCODE_MODEL_LIST_URL": "https://opencode.ai/zen/go/v1/models",
+    "FETCH_TIMEOUT_MS": "15000",
+    "CACHE_TTL_MS": "30000",
+    "REFRESH_INTERVAL_MS": "30000",
+    "WARN_PERCENT": "60",
+    "DANGER_PERCENT": "85"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
