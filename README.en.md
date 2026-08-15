@@ -12,7 +12,7 @@ A standalone multi-account OpenCode Go quota dashboard deployable as either a Do
 ## Features
 
 - Add, edit, disable, and delete multiple OpenCode Go API keys at `/admin`.
-- Show 5-hour, 7-day, and 30-day remaining quota and reset times for every account.
+- Show remaining and used percentages plus reset times for each 5-hour, 7-day, and 30-day window.
 - Configure admin auto-refresh in seconds or minutes, persisted in the browser.
 - Select an official model before sending a minimal real request to test a key.
 - Docker encrypts keys with scrypt and AES-256-GCM; Workers uses HKDF-SHA256 and AES-256-GCM with D1.
@@ -20,7 +20,11 @@ A standalone multi-account OpenCode Go quota dashboard deployable as either a Do
 - Download encrypted account backups and restore them from the admin page.
 - Support Chinese and English UI plus `linux/amd64` and `linux/arm64` images.
 
-The upstream API reports usage percentages, not a monetary balance.
+## Quota semantics
+
+The OpenCode Go `/zen/go/v1/usage` endpoint reports usage percentages, not a monetary balance. The `usage.*.percent` field is the used percentage; this project calculates the remaining percentage as `100 - percent`. For example, an upstream value of `percent: 52` is shown as `Used 52%, Remaining 48%` in the admin UI.
+
+The windows have different meanings: 5 hours is a rolling window, while 7 days and 30 days are period windows. `resetsAt` is the reset time for that window, not the key creation time or subscription start time. The endpoint does not expose a monetary balance, and this project does not infer one from fixed plan prices. If the upstream field semantics change, compare the raw response with the official page.
 
 ## Deploy the published image
 
@@ -65,8 +69,7 @@ curl http://127.0.0.1:3000/healthz
 - Dashboard: `http://your-server:3000/`
 - Key management: `http://your-server:3000/admin`
 
-The browser prompts for `WEB_USERNAME` and `WEB_PASSWORD`. `/healthz` remains unauthenticated for container health checks.
-The first browser visit now opens a login page instead of relying on the browser-native Basic Auth dialog; Basic Auth remains compatible with scripts.
+The browser prompts for `WEB_USERNAME` and `WEB_PASSWORD`. The first browser visit opens a login page and then uses an HttpOnly session cookie instead of relying on the browser-native Basic Auth dialog. Basic Auth remains compatible with scripts and legacy clients. `/healthz` remains unauthenticated for container health checks.
 
 ## Deploy to Cloudflare Workers
 
@@ -113,8 +116,7 @@ curl https://your-worker.example/healthz
 
 - Dashboard: `https://your-worker.example/`
 - Key management: `https://your-worker.example/admin`
-- `/healthz` is public; every other page, script, stylesheet, and API passes through Basic Auth.
-- Workers provides HTTPS automatically. Use a strong password; Cloudflare Access can be added as an outer identity layer when needed.
+- `/healthz`, the login page assets, and the login endpoint are public so the browser can establish a session; the dashboard, admin page, and management APIs require a session cookie or Basic Auth. Workers provides HTTPS automatically. Use a strong password; Cloudflare Access can be added as an outer identity layer when needed.
 
 For local development, copy `.dev.vars.example` to the Git-ignored `.dev.vars`, set test credentials, and run:
 
@@ -125,7 +127,7 @@ npm run worker:dev
 
 Worker accounts, encrypted keys, and usage cache are stored in D1. Ensure the export path cannot be committed before backing up:
 
-You can also click the download icon in `/admin` and later select that JSON file to restore. Restore replaces all accounts in the current deployment and accepts only an encrypted backup from the same deployment type that validates with the current `KEY_ENCRYPTION_SECRET`.
+You can also click `Download backup` in `/admin` and later choose that JSON file with `Restore backup`. Restore replaces all accounts in the current deployment and clears the usage cache. It accepts only an encrypted backup from the same deployment type that validates with the current `KEY_ENCRYPTION_SECRET`. Docker and Workers backup formats are intentionally incompatible.
 
 ```sh
 npx wrangler d1 export opencode-go-balance --remote --output opencode-go-balance-backup.sql

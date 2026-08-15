@@ -185,7 +185,8 @@ export function createHttpServer({ config, accountService, publicDir, logger = c
       return;
     }
 
-    const publicLoginRoute = url.pathname === "/login" || url.pathname === "/login.html" || url.pathname === "/login.js";
+    const publicLoginRoute = url.pathname === "/login" || url.pathname === "/login.html"
+      || url.pathname === "/login.js" || url.pathname === "/styles.css";
     if (!publicLoginRoute && !isAuthorized(request, config)) {
       if ((url.pathname === "/" || url.pathname === "/admin") && (request.method === "GET" || request.method === "HEAD")) {
         response.writeHead(302, { Location: `/login?next=${encodeURIComponent(`${url.pathname}${url.search}`)}`, ...securityHeaders() });

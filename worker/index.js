@@ -275,7 +275,8 @@ export default {
       return json(200, { ok: true }, { "Set-Cookie": clearSessionCookie() });
     }
 
-    const publicLoginRoute = url.pathname === "/login" || url.pathname === "/login.html" || url.pathname === "/login.js";
+    const publicLoginRoute = url.pathname === "/login" || url.pathname === "/login.html"
+      || url.pathname === "/login.js" || url.pathname === "/styles.css";
     if (!publicLoginRoute && !authConfigured(env)) {
       return json(503, { ok: false, error: { code: "authentication_not_configured", message: "Web authentication is not configured" } });
     }

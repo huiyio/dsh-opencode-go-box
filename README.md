@@ -12,7 +12,7 @@
 ## 功能
 
 - 在 `/admin` 添加、编辑、启停和删除多个 OpenCode Go API Key。
-- 每个账号显示 5 小时、7 天和 30 天额度、剩余百分比及重置时间。
+- 每个账号显示 5 小时、7 天和 30 天窗口的剩余百分比、已用百分比及重置时间。
 - 后台支持按秒或分钟设置自动刷新，设置保存在当前浏览器。
 - 从官方模型列表选择模型，再发送最小真实请求测试 Key 是否可调用。
 - Docker 使用 scrypt + AES-256-GCM 加密文件；Workers 使用 HKDF-SHA256 + AES-256-GCM 加密后保存到 D1。
@@ -20,7 +20,11 @@
 - 后台可下载加密账号备份，也可上传备份恢复账号。
 - 提供中文和英文界面，支持 `linux/amd64` 和 `linux/arm64` 镜像。
 
-OpenCode Go 接口返回的是用量百分比，不是货币余额。本项目不会根据固定套餐金额推算余额。
+## 额度口径
+
+OpenCode Go `/zen/go/v1/usage` 接口返回的是用量百分比，不是货币余额。接口字段 `usage.*.percent` 表示已用比例；本项目按 `100 - percent` 计算并显示剩余比例。例如接口返回 `percent: 52` 时，后台显示“已用 52%，剩余 48%”。
+
+三个窗口的含义不同：5 小时是滚动窗口，7 天和 30 天是周期窗口。`resetsAt` 是对应窗口的重置时间，不代表 Key 添加时间或订阅开通时间。接口没有公开货币余额字段，本项目不会根据固定套餐金额推算余额；如果上游调整字段含义，应以原始接口响应和官方页面为准。
 
 ## 使用预构建镜像
 
@@ -89,8 +93,7 @@ curl http://127.0.0.1:3000/healthz
 - 看板：`http://服务器地址:3000/`
 - Key 管理：`http://服务器地址:3000/admin`
 
-浏览器会要求输入 `.env` 中的 `WEB_USERNAME` 和 `WEB_PASSWORD`。`/healthz` 专门用于容器健康检查，不要求认证。
-首次访问会打开登录页，不再依赖浏览器原生 Basic Auth 弹窗；原 Basic Auth 仍可用于脚本请求。
+浏览器会要求输入 `.env` 中的 `WEB_USERNAME` 和 `WEB_PASSWORD`。首次访问会打开登录页，成功后使用 HttpOnly 会话 Cookie，不再依赖浏览器原生 Basic Auth 弹窗；Basic Auth 仍可用于脚本请求和旧客户端。`/healthz` 专门用于容器健康检查，不要求认证。
 
 ## 部署到 Cloudflare Workers
 
@@ -137,8 +140,7 @@ curl https://你的-worker地址/healthz
 
 - 看板：`https://你的-worker地址/`
 - Key 管理：`https://你的-worker地址/admin`
-- `/healthz` 匿名可访问，其他页面、脚本、样式和 API 全部先经过 Basic Auth。
-- Workers 自动提供 HTTPS；仍应使用强密码。需要更严格的身份策略时可在外层再配置 Cloudflare Access。
+- `/healthz`、登录页面、登录脚本和样式可匿名加载；登录接口用于建立会话。看板、后台和管理 API 需要会话 Cookie 或 Basic Auth。Workers 自动提供 HTTPS；仍应使用强密码。需要更严格的身份策略时可在外层再配置 Cloudflare Access。
 
 本地开发可复制 `.dev.vars.example` 为 Git 忽略的 `.dev.vars`，填写测试凭据后运行：
 
@@ -149,7 +151,7 @@ npm run worker:dev
 
 Workers 版的账号、加密 Key 和用量缓存存储在 D1。备份前先确认导出文件不会被提交：
 
-也可以直接在 `/admin` 点击下载图标备份，或选择之前下载的备份文件恢复。恢复会覆盖当前部署中的全部账号，只接受相同部署类型且能用当前 `KEY_ENCRYPTION_SECRET` 校验的加密备份。
+也可以直接在 `/admin` 点击“下载备份”保存 JSON 文件，或点击“恢复备份”选择之前下载的文件。恢复会覆盖当前部署中的全部账号，并清空用量缓存；只接受相同部署类型且能用当前 `KEY_ENCRYPTION_SECRET` 校验的加密备份。Docker 和 Workers 备份格式不互通。
 
 ```sh
 npx wrangler d1 export opencode-go-balance --remote --output opencode-go-balance-backup.sql

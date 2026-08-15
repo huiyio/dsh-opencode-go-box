@@ -59,6 +59,8 @@ test("HTTP server exposes health while protecting the dashboard and API", async 
   const loginPage = await fetch(`${baseUrl}/login`);
   assert.equal(loginPage.status, 200);
   assert.match(await loginPage.text(), /login-form/);
+  const loginStyles = await fetch(`${baseUrl}/styles.css`);
+  assert.equal(loginStyles.status, 200);
 
   const invalidLogin = await fetch(`${baseUrl}/api/login`, {
     method: "POST",
