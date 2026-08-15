@@ -334,19 +334,19 @@ export class OpencodeUsageGateway extends TypertRemoteService {
   }
 
   /** Per-step (per model call) usage of one DSH session. */
-  async dshSessionMessages(args) {
-    const sessionId = args && typeof args.sessionId === "string" ? args.sessionId : undefined;
-    if (sessionId === undefined) {
+  async dshSessionMessages(sessionId) {
+    const id = typeof sessionId === "string" && sessionId.length > 0 ? sessionId : undefined;
+    if (id === undefined) {
       return { ok: false, error: "missing-session", message: "缺少会话 ID。", sessionId: null, model: null, steps: [] };
     }
     try {
-      const snapshot = await this.ctx.sessionQuery.readSession(sessionId);
-      const folded = foldSessionLog(sessionId, snapshot.session && snapshot.session.createdAt || 0, snapshot.events || []);
+      const snapshot = await this.ctx.sessionQuery.readSession(id);
+      const folded = foldSessionLog(id, snapshot.session && snapshot.session.createdAt || 0, snapshot.events || []);
       return {
         ok: true,
         error: null,
         message: null,
-        sessionId,
+        sessionId: id,
         model: folded.model,
         provider: folded.provider,
         createdAt: folded.createdAt,
@@ -357,7 +357,7 @@ export class OpencodeUsageGateway extends TypertRemoteService {
         ok: false,
         error: "read-failed",
         message: "读取会话明细失败：" + String(error && error.message ? error.message : error),
-        sessionId,
+        sessionId: id,
         model: null,
         steps: [],
       };

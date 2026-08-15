@@ -139,7 +139,16 @@ window.__ModuleLoader__.load({
           namespace: "opencodeUsage",
           method: "dshSessionMessages",
           invocation: { kind: "direct" },
-          parameters: [{ name: "sessionId", schema: { parse(value) { return value; } } }],
+          parameters: [{
+            name: "sessionId",
+            wire: "sessionId",
+            source: "json",
+            codec: {
+              mode: "strict",
+              typeSymbol: "dsh-opencode-go-usage#opencodeUsage/dshSessionMessages:sessionId",
+              schema: { parse(value) { return value; } },
+            },
+          }],
           result: {
             mode: "strict",
             typeSymbol: "dsh-opencode-go-usage#DshSessionMessagesResult",
@@ -306,7 +315,7 @@ window.__ModuleLoader__.load({
         setDetail({ kind: "loading" });
         Promise.resolve()
           .then(() => getApi())
-          .then((api) => api.dshSessionMessages({ sessionId }))
+          .then((api) => api.dshSessionMessages(sessionId))
           .then((result) => {
             if (!result || result.ok === false) {
               setDetail({ kind: "failed", message: (result && result.error && result.error.message) || "remote failed" });

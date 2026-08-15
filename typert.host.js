@@ -125,7 +125,16 @@ export const TYPERT = {
       method: "dshSessionMessages",
       invocation: { kind: "direct" },
       parameters: [
-        { name: "sessionId", schema: z.string() },
+        {
+          name: "sessionId",
+          wire: "sessionId",
+          source: "json",
+          codec: {
+            mode: "strict",
+            typeSymbol: "dsh-opencode-go-usage#opencodeUsage/dshSessionMessages:sessionId",
+            schema: z.string(),
+          },
+        },
       ],
       result: {
         mode: "strict",
