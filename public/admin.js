@@ -43,6 +43,8 @@ const copy = {
     remainingQuota: "剩余",
     reset: "重置",
     quotaFailed: "查询失败",
+    remaining: "剩余",
+    used: "已用",
     rollingPeriod: "5小时",
     weeklyPeriod: "7天",
     monthlyPeriod: "30天",
@@ -102,6 +104,8 @@ const copy = {
     remainingQuota: "Remaining",
     reset: "Resets",
     quotaFailed: "Query failed",
+    remaining: "Remaining",
+    used: "Used",
     rollingPeriod: "5 hours",
     weeklyPeriod: "7 days",
     monthlyPeriod: "30 days",
@@ -391,9 +395,9 @@ function quotaSummary(account) {
       const windowValue = state.value.usage?.[name];
       resetAt.textContent = formatResetDate(windowValue?.resetsAt);
       resetAt.dateTime = windowValue?.resetsAt || "";
-      value.textContent = formatRemaining(windowValue?.remainingPercent);
+      value.textContent = `${t("remaining")} ${formatRemaining(windowValue?.remainingPercent)}`;
       metric.className += quotaLevel(windowValue?.percent, state.value.thresholds || { warn: 60, danger: 85 });
-      metric.title = `${t("remainingQuota")} ${value.textContent}; ${t("reset")} ${resetAt.textContent}`;
+      metric.title = `${t("remaining")}: ${formatRemaining(windowValue?.remainingPercent)}; ${t("used")}: ${formatRemaining(windowValue?.percent)}; ${t("reset")} ${resetAt.textContent}`;
     }
 
     metric.append(metricLabel, resetAt, value);

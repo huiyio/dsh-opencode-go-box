@@ -555,7 +555,7 @@ h1 {
 .quota-summary {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(88px, 1fr));
+  grid-template-columns: repeat(3, minmax(104px, 1fr));
   gap: 8px;
 }
 
