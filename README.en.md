@@ -18,7 +18,7 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) web-GUI pl
 - **The DSH session details come entirely from DeepSeek Harness session logs** (every `assistant/message` event carries token accounting) — no local OpenCode client required, works on any DSH deployment
 - Cache stats: `cacheReadTokens` (hit) / `cacheWriteTokens` (write) per session and per call; hit rate = cache read ÷ (uncached input + cache read)
 - Model filter: sessions grouped by `source.model`, one-click chip filtering that narrows both the totals card and the list; the all-models view adds a **By model** table (sessions / input / cache read / cache write / output / reasoning / hit rate)
-- Composer dock widget (a `conversation.composer.dock` contribution): `🟢 5h 22% · Weekly 13% · Monthly 13% · resets 2h13m`, colored by the 5-hour rolling window thresholds (default: <60% green / 60–85% orange / ≥85% red)
+- Composer dock widget (a `conversation.composer.dock` contribution): `🟢 5h 22% · W 13% · M 13% · ↻ 2h13m` (W = weekly, M = monthly, ↻ = reset countdown; hover shows the full labels), colored by the 5-hour rolling window thresholds (default: <60% green / 60–85% orange / ≥85% red)
 - Precondition check: if opencode-go is missing from **Settings → Models**, or no API key is found, it shows guidance instead of an error
 - API key resolution: the credential reference the opencode-go provider profile declares (`apiKeyEnv`, discovered through the `llm` provider directory), then the conventional `OPENCODE_GO_API_KEY` from the DSH credentials seam, then OpenCode's `auth.json`
 

@@ -672,6 +672,7 @@ window.__ModuleLoader__.load({
 
         let text = t("dockNotConfigured");
         let color = colors.muted;
+        let tip = null;
         if (state.kind === "failed") {
           text = t("dockFailed");
         } else if (state.kind === "done") {
@@ -685,15 +686,23 @@ window.__ModuleLoader__.load({
             color = status === "ok" ? colors.ok : status === "warn" ? colors.warn : status === "danger" ? colors.danger : colors.muted;
             const parts = [
               "5h " + (rp === null ? "—" : rp + "%"),
+              "W " + (wp === null ? "—" : wp + "%"),
+              "M " + (mp === null ? "—" : mp + "%"),
+            ];
+            const countdown = u.rolling && u.rolling.resetsAt ? fmtCountdown(u.rolling.resetsAt) : "";
+            if (countdown) parts.push("↻ " + countdown);
+            text = parts.join(" · ");
+            // Localized tooltip keeps the full names behind the compact W/M/↻ row.
+            const tipParts = [
+              "5h " + (rp === null ? "—" : rp + "%"),
               t("weekly") + " " + (wp === null ? "—" : wp + "%"),
               t("monthly") + " " + (mp === null ? "—" : mp + "%"),
             ];
-            const countdown = u.rolling && u.rolling.resetsAt ? fmtCountdown(u.rolling.resetsAt) : "";
-            if (countdown) parts.push(t("dockReset") + " " + countdown);
-            text = parts.join(" · ");
+            if (countdown) tipParts.push(t("dockReset") + " " + countdown);
+            tip = tipParts.join(" · ");
           }
         }
-        return React.createElement("div", { style: styles.dockWrap, title: text },
+        return React.createElement("div", { style: styles.dockWrap, title: tip || text },
           React.createElement("span", { style: { ...styles.dot, background: color } }),
           React.createElement("span", null, text),
         );
