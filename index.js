@@ -23,6 +23,7 @@ const DEFAULT_WARN_PERCENT = 60;
 const DEFAULT_DANGER_PERCENT = 85;
 const MAX_SESSIONS = 30;
 const MAX_STEPS_PER_SESSION = 400;
+const READ_CONCURRENCY = 4;
 
 export const Config = z.object({
   baseUrl: z.string().default(DEFAULT_BASE_URL),
@@ -121,10 +122,27 @@ function pickWindow(w) {
   };
 }
 
-/** Session-level usage fold from one raw DSH session log. */
+/**
+ * Session-level usage fold from one raw DSH session log.
+ *
+ * Session events wrap their payload in `data` (`{ type, seq, time, data }`),
+ * so every read below goes through `event.data`.
+ *
+ * Provider attribution is PER STEP: each assistant/message carries the
+ * provenance of the model call that produced it (`message.source.provider`),
+ * so a session that switched providers mid-way still accounts every step to
+ * the provider that actually served it. Steps whose provenance is missing
+ * (older or imported logs) fall back to the latest request header seen so
+ * far. Only opencode-go steps are kept in the returned totals/steps; a
+ * session matches when at least one step is attributed to opencode-go, or
+ * when no usage was recorded at all but the latest header route is
+ * opencode-go (model selected, nothing billed yet).
+ */
 function foldSessionLog(sessionId, createdAt, events) {
-  let provider = null;
-  let model = null;
+  let headerProvider = null;
+  let headerModel = null;
+  let matchedModel = null;
+  let sawAnyUsage = false;
   let messageCount = 0;
   const totals = {
     inputTokens: 0,
@@ -136,22 +154,30 @@ function foldSessionLog(sessionId, createdAt, events) {
   const steps = [];
   for (const event of events) {
     if (event === null || typeof event !== "object") continue;
+    const data = event.data;
+    if (data === null || typeof data !== "object") continue;
     if (event.type === "request/header") {
-      const config = event.header && typeof event.header === "object" ? event.header.config : undefined;
+      const config = data.header && typeof data.header === "object" ? data.header.config : undefined;
       if (config && typeof config === "object") {
         const p = asString(config.provider);
-        if (p !== undefined) provider = p;
+        if (p !== undefined) headerProvider = p;
         const m = asString(config.model);
-        if (m !== undefined) model = m;
+        if (m !== undefined) headerModel = m;
       }
       continue;
     }
     if (event.type !== "assistant/message") continue;
-    const usage = event.usage;
+    const usage = data.usage;
     if (usage === undefined || usage === null || typeof usage !== "object") continue;
+    sawAnyUsage = true;
+    const message = data.message && typeof data.message === "object" ? data.message : undefined;
+    const source = message && message.source && typeof message.source === "object" ? message.source : undefined;
+    const stepProvider = asString(source && source.provider) ?? headerProvider;
+    const stepModel = asString(source && source.model) ?? headerModel;
+    if (stepProvider !== PROVIDER_ID) continue;
     const step = {
-      turn: typeof event.turn === "number" ? event.turn : 0,
-      step: typeof event.step === "number" ? event.step : 0,
+      turn: typeof data.turn === "number" ? data.turn : 0,
+      step: typeof data.step === "number" ? data.step : 0,
       inputTokens: Number(usage.inputTokens) || 0,
       outputTokens: Number(usage.outputTokens) || 0,
       cacheReadTokens: Number(usage.cacheReadTokens) || 0,
@@ -159,6 +185,7 @@ function foldSessionLog(sessionId, createdAt, events) {
       reasoningTokens: Number(usage.reasoningTokens) || 0,
     };
     messageCount += 1;
+    if (stepModel !== null) matchedModel = stepModel;
     totals.inputTokens += step.inputTokens;
     totals.outputTokens += step.outputTokens;
     totals.cacheReadTokens += step.cacheReadTokens;
@@ -166,15 +193,37 @@ function foldSessionLog(sessionId, createdAt, events) {
     totals.reasoningTokens += step.reasoningTokens;
     if (steps.length < MAX_STEPS_PER_SESSION) steps.push(step);
   }
+  const matched = messageCount > 0 || (!sawAnyUsage && headerProvider === PROVIDER_ID);
   return {
     sessionId: String(sessionId),
-    provider,
-    model,
-    createdAt: new Date(createdAt).toISOString(),
+    provider: matched ? PROVIDER_ID : null,
+    model: matchedModel ?? (matched ? headerModel : null),
+    createdAt: new Date(typeof createdAt === "number" && createdAt > 0 ? createdAt : Date.now()).toISOString(),
     messageCount,
     totals,
     steps,
   };
+}
+
+/** Run `fn` over `items` with a bounded worker pool; failures yield null. */
+async function mapPool(items, size, fn) {
+  const out = new Array(items.length).fill(null);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      try {
+        out[index] = await fn(items[index]);
+      } catch {
+        out[index] = null;
+      }
+    }
+  }
+  const workers = [];
+  for (let i = 0; i < Math.min(size, items.length); i += 1) workers.push(worker());
+  await Promise.all(workers);
+  return out;
 }
 
 export class OpencodeUsageGateway extends TypertRemoteService {
@@ -259,8 +308,11 @@ export class OpencodeUsageGateway extends TypertRemoteService {
    * Aggregate per-session usage from DeepSeek Harness session persistence.
    * Every DSH session logs per-step token accounting on its
    * `assistant/message` events, so this works for every deployment —
-   * no local OpenCode client required. Only sessions whose latest request
-   * header used the opencode-go provider are returned.
+   * no local OpenCode client required. Sessions are matched per step: only
+   * the steps actually served by the opencode-go provider are counted, and
+   * any session containing at least one such step is returned.
+   * Logs are decoded with a small worker pool so a long history does not
+   * serialize on one read at a time.
    */
   async dshUsage() {
     const query = this.ctx.sessionQuery;
@@ -287,16 +339,10 @@ export class OpencodeUsageGateway extends TypertRemoteService {
       .sort((a, b) => (b.header.createdAt || 0) - (a.header.createdAt || 0))
       .slice(0, maxSessions);
 
-    const sessions = [];
-    for (const record of sorted) {
-      let snapshot;
-      try {
-        snapshot = await query.readSession(record.header.id);
-      } catch {
-        continue;
-      }
-      const folded = foldSessionLog(record.header.id, record.header.createdAt || 0, snapshot.events || []);
-      if (folded.provider !== PROVIDER_ID) continue;
+    const folded = await mapPool(sorted, READ_CONCURRENCY, async (record) => {
+      const snapshot = await query.readSession(record.header.id);
+      const fold = foldSessionLog(record.header.id, record.header.createdAt || 0, snapshot.events || []);
+      if (fold.provider !== PROVIDER_ID) return null;
       let title = null;
       try {
         const titleSnapshot = await query.readTitle(record.header.id);
@@ -304,13 +350,14 @@ export class OpencodeUsageGateway extends TypertRemoteService {
       } catch {
         /* title is best-effort */
       }
-      sessions.push({
-        ...folded,
+      return {
+        ...fold,
         title,
         cwd: asString(record.header.cwd) ?? null,
         agentPreset: asString(record.header.agentPreset) ?? null,
-      });
-    }
+      };
+    });
+    const sessions = folded.filter((session) => session !== null);
 
     const totals = sessions.reduce(
       (acc, s) => ({
