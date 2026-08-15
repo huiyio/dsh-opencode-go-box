@@ -53,6 +53,49 @@ test("EncryptedKeyStore supports update, disable, duplicate detection, and remov
   assert.equal(store.list().length, 0);
 });
 
+test("EncryptedKeyStore manages lifecycle dates and deletes expired accounts", async (context) => {
+  const { store } = await temporaryStore(context);
+  const created = await store.add({
+    label: "Monthly",
+    key: "sk-opencode-monthly-1234",
+    startsAt: "2027-01-31",
+    autoDelete: true,
+  });
+  assert.equal(created.startsAt, "2027-01-31");
+  assert.equal(created.expiresAt, "2027-02-28");
+  assert.equal(created.autoDelete, true);
+  assert.equal(created.lifecycleStatus, "pending");
+
+  assert.deepEqual(await store.purgeExpired("2027-02-27"), []);
+  const removed = await store.purgeExpired("2027-02-28");
+  assert.equal(removed.length, 1);
+  assert.equal(store.list().length, 0);
+});
+
+test("EncryptedKeyStore keeps manually expired accounts and validates date ranges", async (context) => {
+  const { store } = await temporaryStore(context);
+  await assert.rejects(
+    store.add({
+      label: "Invalid",
+      key: "sk-opencode-invalid-1234",
+      startsAt: "2026-08-15",
+      expiresAt: "2026-08-14",
+    }),
+    (error) => error instanceof KeyStoreError && error.code === "invalid_lifecycle",
+  );
+  const created = await store.add({
+    label: "Retained",
+    key: "sk-opencode-retained-1234",
+    startsAt: "2026-08-01",
+    expiresAt: "2026-08-10",
+    autoDelete: false,
+  });
+  assert.equal(created.lifecycleStatus, "expired");
+  assert.deepEqual(await store.purgeExpired("2026-08-16"), []);
+  assert.equal(store.list({ includeDisabled: true }).length, 1);
+  assert.equal(store.list({ includeDisabled: false }).length, 0);
+});
+
 test("EncryptedKeyStore exports and restores an encrypted backup", async (context) => {
   const { store } = await temporaryStore(context);
   await store.add({ label: "Primary", key: "sk-opencode-backup-1234" });

@@ -59,6 +59,12 @@ const copy = {
     startModelTest: "开始测试",
     modelListFailed: "模型列表加载失败，请稍后重试。",
     addedAt: "添加时间",
+    startsAt: "开通日期",
+    expiresAt: "结束日期",
+    autoDeleteMonth: "一个月到期自动删除",
+    autoDeleteEnabled: "到期自动删除",
+    pending: "待开通",
+    expired: "已到期",
   },
   en: {
     eyebrow: "Account management",
@@ -120,6 +126,12 @@ const copy = {
     startModelTest: "Start test",
     modelListFailed: "Unable to load the model list. Try again later.",
     addedAt: "Added",
+    startsAt: "Starts",
+    expiresAt: "Ends",
+    autoDeleteMonth: "Delete automatically after one month",
+    autoDeleteEnabled: "Deletes automatically at expiry",
+    pending: "Pending",
+    expired: "Expired",
   },
 };
 
@@ -136,6 +148,12 @@ const editDialog = document.querySelector("#edit-dialog");
 const editForm = document.querySelector("#edit-form");
 const editLabel = document.querySelector("#edit-label");
 const editKey = document.querySelector("#edit-key");
+const accountStartsAt = document.querySelector("#account-starts-at");
+const accountExpiresAt = document.querySelector("#account-expires-at");
+const accountAutoDelete = document.querySelector("#account-auto-delete");
+const editStartsAt = document.querySelector("#edit-starts-at");
+const editExpiresAt = document.querySelector("#edit-expires-at");
+const editAutoDelete = document.querySelector("#edit-auto-delete");
 const editEnabled = document.querySelector("#edit-enabled");
 const editError = document.querySelector("#edit-error");
 const refreshAllButton = document.querySelector("#refresh-all");
@@ -271,6 +289,7 @@ function errorText(code) {
   if (code === "admin_disabled" || code === "key_store_disabled") return t("adminDisabled");
   if (code === "duplicate_key") return t("duplicate");
   if (code === "invalid_backup") return t("invalidBackup");
+  if (code === "invalid_lifecycle") return t("invalid");
   if (code?.startsWith("invalid_")) return t("invalid");
   return t("generic");
 }
@@ -335,6 +354,37 @@ function formatAccountDate(value) {
   }).format(date);
 }
 
+function todayDate() {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function addCalendarMonth(value) {
+  if (!value) return "";
+  const [year, month, day] = value.split("-").map(Number);
+  const target = new Date(Date.UTC(year, month, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), Math.min(day, lastDay)))
+    .toISOString().slice(0, 10);
+}
+
+function syncAutoDelete(startsInput, expiresInput, checkbox) {
+  expiresInput.disabled = checkbox.checked;
+  if (checkbox.checked) expiresInput.value = addCalendarMonth(startsInput.value || todayDate());
+}
+
+function displayLifecycleDate(value) {
+  if (!value) return "--";
+  const [year, month, day] = value.split("-");
+  return locale === "zh" ? `${year}/${month}/${day}` : `${month}/${day}/${year}`;
+}
+
 function formatResetDate(value) {
   if (!value) return "--";
   const date = new Date(value);
@@ -383,7 +433,7 @@ function quotaSummary(account) {
     resetAt.textContent = "--";
     const value = document.createElement("strong");
 
-    if (!account.enabled) {
+    if (account.lifecycleStatus && account.lifecycleStatus !== "active") {
       value.textContent = "--";
     } else if (!state || state.kind === "loading") {
       value.textContent = "…";
@@ -440,11 +490,33 @@ function renderAccounts() {
     const details = document.createElement("div");
     details.className = "account-details";
     const status = document.createElement("span");
-    status.className = `status-label${account.enabled ? "" : " is-disabled"}`;
-    status.textContent = account.enabled ? t("enabled") : t("disabled");
+    const lifecycleState = account.lifecycleStatus || (account.enabled ? "active" : "disabled");
+    status.className = `status-label${lifecycleState === "active" ? "" : ` is-${lifecycleState}`}`;
+    status.textContent = lifecycleState === "pending"
+      ? t("pending")
+      : lifecycleState === "expired"
+        ? t("expired")
+        : lifecycleState === "disabled"
+          ? t("disabled")
+          : t("enabled");
     const source = document.createElement("span");
     source.textContent = account.source === "environment" ? t("environment") : t("stored");
     details.append(status, source);
+    if (account.startsAt) {
+      const starts = document.createElement("span");
+      starts.textContent = `${t("startsAt")}: ${displayLifecycleDate(account.startsAt)}`;
+      details.append(starts);
+    }
+    if (account.expiresAt) {
+      const expires = document.createElement("span");
+      expires.textContent = `${t("expiresAt")}: ${displayLifecycleDate(account.expiresAt)}`;
+      details.append(expires);
+    }
+    if (account.autoDelete) {
+      const autoDelete = document.createElement("span");
+      autoDelete.textContent = t("autoDeleteEnabled");
+      details.append(autoDelete);
+    }
 
     const actions = document.createElement("div");
     actions.className = "account-actions";
@@ -465,7 +537,7 @@ function renderAccounts() {
       `secondary test-button${testResult ? ` is-${testResult}` : ""}`,
       () => openTestDialog(account),
     );
-    testButton.disabled = busy || !account.enabled || testingAccounts.has(account.id);
+    testButton.disabled = busy || lifecycleState !== "active" || testingAccounts.has(account.id);
     actions.append(testButton);
     if (account.editable) {
       actions.append(
@@ -505,7 +577,7 @@ async function openTestDialog(account) {
 }
 
 async function testAccount(account, model) {
-  if (busy || !account.enabled || testingAccounts.has(account.id)) return;
+  if (busy || account.lifecycleStatus !== "active" || testingAccounts.has(account.id)) return;
   testingAccounts.add(account.id);
   testResults.delete(account.id);
   const previousUsage = usageByAccount.get(account.id);
@@ -560,7 +632,7 @@ async function loadAccounts() {
 
 async function performLoadAccountUsages(force) {
   const generation = ++usageGeneration;
-  const enabledAccounts = accounts.filter((account) => account.enabled);
+  const enabledAccounts = accounts.filter((account) => (account.lifecycleStatus || (account.enabled ? "active" : "disabled")) === "active");
   const currentIds = new Set(accounts.map((account) => account.id));
   for (const id of usageByAccount.keys()) {
     if (!currentIds.has(id)) {
@@ -674,6 +746,10 @@ function openEdit(account) {
   editLabel.value = account.label;
   editKey.value = "";
   editEnabled.checked = account.enabled;
+  editStartsAt.value = account.startsAt || "";
+  editExpiresAt.value = account.expiresAt || "";
+  editAutoDelete.checked = Boolean(account.autoDelete);
+  syncAutoDelete(editStartsAt, editExpiresAt, editAutoDelete);
   editDialog.showModal();
 }
 
@@ -695,15 +771,29 @@ addForm.addEventListener("submit", async (event) => {
   await runMutation(async () => {
     await api("/api/admin/accounts", {
       method: "POST",
-      body: JSON.stringify({ label: formData.get("label"), key: formData.get("key") }),
+      body: JSON.stringify({
+        label: formData.get("label"),
+        key: formData.get("key"),
+        startsAt: accountStartsAt.value || null,
+        expiresAt: accountExpiresAt.value || null,
+        autoDelete: accountAutoDelete.checked,
+      }),
     });
     addForm.reset();
+    accountStartsAt.value = todayDate();
+    syncAutoDelete(accountStartsAt, accountExpiresAt, accountAutoDelete);
   });
 });
 
 editForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const changes = { label: editLabel.value, enabled: editEnabled.checked };
+  const changes = {
+    label: editLabel.value,
+    enabled: editEnabled.checked,
+    startsAt: editStartsAt.value || null,
+    expiresAt: editExpiresAt.value || null,
+    autoDelete: editAutoDelete.checked,
+  };
   if (editKey.value) changes.key = editKey.value;
   await runMutation(async () => {
     await api(`/api/admin/accounts/${encodeURIComponent(editingId)}`, {
@@ -719,6 +809,10 @@ document.querySelector("#edit-cancel").addEventListener("click", () => {
   clearError();
   editDialog.close();
 });
+accountStartsAt.addEventListener("change", () => syncAutoDelete(accountStartsAt, accountExpiresAt, accountAutoDelete));
+accountAutoDelete.addEventListener("change", () => syncAutoDelete(accountStartsAt, accountExpiresAt, accountAutoDelete));
+editStartsAt.addEventListener("change", () => syncAutoDelete(editStartsAt, editExpiresAt, editAutoDelete));
+editAutoDelete.addEventListener("change", () => syncAutoDelete(editStartsAt, editExpiresAt, editAutoDelete));
 document.querySelector("#test-cancel").addEventListener("click", () => {
   testAccountTarget = null;
   testDialog.close();
@@ -758,3 +852,5 @@ autoRefreshUnit.value = storedAutoRefresh.unit;
 applyAutoRefreshSetting();
 setLocale(locale);
 loadAccounts();
+accountStartsAt.value = todayDate();
+syncAutoDelete(accountStartsAt, accountExpiresAt, accountAutoDelete);

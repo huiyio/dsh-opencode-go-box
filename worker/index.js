@@ -150,6 +150,8 @@ async function handleApi(request, env, url) {
     if (request.method !== "GET") return methodNotAllowed("GET");
     const account = await store.resolve(url.searchParams.get("account"));
     if (!account.enabled) throw new WorkerError("account_disabled", "Account is disabled", 409);
+    if (account.lifecycleStatus === "pending") throw new WorkerError("account_not_started", "Account is not active yet", 409);
+    if (account.lifecycleStatus === "expired") throw new WorkerError("account_expired", "Account has expired", 410);
     const force = url.searchParams.get("refresh") === "1";
     let result = force ? null : await store.getCachedUsage(account.id);
     if (!result) {
@@ -211,6 +213,8 @@ async function handleApi(request, env, url) {
       const body = await readJsonBody(request);
       const account = await store.getSecret(id);
       if (!account.enabled) throw new WorkerError("account_disabled", "Account is disabled", 409);
+      if (account.lifecycleStatus === "pending") throw new WorkerError("account_not_started", "Account is not active yet", 409);
+      if (account.lifecycleStatus === "expired") throw new WorkerError("account_expired", "Account has expired", 410);
       const modelTest = await testModel(account.key, body.model, config);
       const { key: _key, ...publicAccount } = account;
       return json(200, { ok: true, valid: true, modelTest: { account: publicAccount, ...modelTest } });
@@ -291,10 +295,17 @@ export default {
     }
 
     try {
+      if (url.pathname === "/" || url.pathname === "/admin" || url.pathname.startsWith("/api/")) {
+        await new AccountStore(env).cleanupExpired();
+      }
       if (url.pathname.startsWith("/api/")) return await handleApi(request, env, url);
       return await serveAsset(request, env, url);
     } catch (error) {
       return reportError(error, request);
     }
+  },
+
+  async scheduled(_event, env, context) {
+    context.waitUntil(new AccountStore(env).cleanupExpired());
   },
 };

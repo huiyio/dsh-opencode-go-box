@@ -18,6 +18,7 @@ A standalone multi-account OpenCode Go quota dashboard deployable as either a Do
 - Docker encrypts keys with scrypt and AES-256-GCM; Workers uses HKDF-SHA256 and AES-256-GCM with D1.
 - Use a username/password login page with an HttpOnly session cookie; Basic Auth remains available for scripts and legacy clients.
 - Download encrypted account backups and restore them from the admin page.
+- Set start and end dates per key, with optional automatic deletion after one calendar month.
 - Support Chinese and English UI plus `linux/amd64` and `linux/arm64` images.
 
 ## Quota semantics
@@ -25,6 +26,16 @@ A standalone multi-account OpenCode Go quota dashboard deployable as either a Do
 The OpenCode Go `/zen/go/v1/usage` endpoint reports usage percentages, not a monetary balance. The `usage.*.percent` field is the used percentage; this project calculates the remaining percentage as `100 - percent`. For example, an upstream value of `percent: 52` is shown as `Used 52%, Remaining 48%` in the admin UI.
 
 The windows have different meanings: 5 hours is a rolling window, while 7 days and 30 days are period windows. `resetsAt` is the reset time for that window, not the key creation time or subscription start time. The endpoint does not expose a monetary balance, and this project does not infer one from fixed plan prices. If the upstream field semantics change, compare the raw response with the official page.
+
+## Key lifecycle
+
+Each stored key can be configured in the admin page with:
+
+- `Starts`: before this date, the account is pending and cannot fetch quota or send a model test.
+- `Ends`: the account expires on this date. Without automatic deletion, it remains visible in the admin page as expired.
+- `Delete automatically after one month`: calculates one calendar month from the start date and deletes the key plus its usage cache at expiry. January 31, for example, becomes the last day of February.
+
+Dates are stored as `YYYY-MM-DD` and evaluated in the `Asia/Shanghai` time zone. The Docker process and a Cloudflare Workers Cron both clean up every minute; platform scheduling can introduce a short delay. Existing accounts and older backups migrate with their original creation date as the start date and remain non-expiring with automatic deletion disabled. Automatic deletion is irreversible, so download an encrypted backup and retain the original `KEY_ENCRYPTION_SECRET` separately.
 
 ## Deploy the published image
 
@@ -88,6 +99,8 @@ Add the returned `database_id` to `d1_databases[0]` in `wrangler.jsonc`, then in
 ```sh
 npx wrangler d1 migrations apply opencode-go-balance --remote
 ```
+
+Existing Workers deployments must also apply the remote migrations before deploying this version. Lifecycle cleanup runs from the per-minute Cron in `wrangler.jsonc` and before dashboard or management API requests.
 
 Set the three required secrets. Wrangler prompts securely; never place real values in `wrangler.jsonc` or Git:
 

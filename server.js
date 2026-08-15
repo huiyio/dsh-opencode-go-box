@@ -18,6 +18,10 @@ const server = createHttpServer({
   accountService,
   publicDir: join(currentDir, "public"),
 });
+const cleanupTimer = setInterval(() => {
+  accountService.cleanupExpiredAccounts().catch((error) => console.error("Failed to delete expired accounts", error));
+}, 60_000);
+cleanupTimer.unref();
 
 server.listen(config.port, config.host, () => {
   console.log(`OpenCode Go Balance is listening on http://${config.host}:${config.port}`);
@@ -28,6 +32,7 @@ server.listen(config.port, config.host, () => {
 
 function shutdown(signal) {
   console.log(`${signal} received, shutting down.`);
+  clearInterval(cleanupTimer);
   server.close((error) => {
     if (error) {
       console.error("Failed to close the HTTP server", error);

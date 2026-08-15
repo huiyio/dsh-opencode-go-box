@@ -57,6 +57,10 @@ const config = Object.freeze({
 const keyStore = new EncryptedKeyStore({ filePath: join(dataDir, "keys.enc.json"), secret: config.keyEncryptionSecret });
 await keyStore.init();
 const accountService = new AccountService({ config, keyStore });
+const cleanupTimer = setInterval(() => {
+  accountService.cleanupExpiredAccounts().catch(() => {});
+}, 60_000);
+cleanupTimer.unref();
 const app = createHttpServer({ config, accountService, publicDir: join(projectDir, "public") });
 await new Promise((resolve) => app.listen(0, "127.0.0.1", resolve));
 
@@ -88,6 +92,7 @@ console.log("Local persistent preview is listening on http://127.0.0.1:57726/");
 console.log(`Runtime data: ${runtimeDir}`);
 
 async function close() {
+  clearInterval(cleanupTimer);
   await new Promise((resolve) => proxy.close(resolve));
   await new Promise((resolve) => app.close(resolve));
   process.exit(0);

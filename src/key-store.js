@@ -5,6 +5,18 @@ import { promisify } from "node:util";
 
 const scrypt = promisify(scryptCallback);
 const STORE_AAD = Buffer.from("opencode-go-balance:key-store:v1");
+const LIFECYCLE_TIME_ZONE = "Asia/Shanghai";
+
+function zonedDate(value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: LIFECYCLE_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
 
 export class KeyStoreError extends Error {
   constructor(code, message, status = 400) {
@@ -31,6 +43,50 @@ function normalizeKey(value) {
   return key;
 }
 
+function dateOnly(value, fieldName) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new KeyStoreError("invalid_lifecycle", `${fieldName} must use YYYY-MM-DD`);
+  }
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    throw new KeyStoreError("invalid_lifecycle", `${fieldName} is not a valid date`);
+  }
+  return value;
+}
+
+function addCalendarMonth(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  const targetMonth = new Date(Date.UTC(year, month, 1));
+  const lastDay = new Date(Date.UTC(targetMonth.getUTCFullYear(), targetMonth.getUTCMonth() + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(targetMonth.getUTCFullYear(), targetMonth.getUTCMonth(), Math.min(day, lastDay)))
+    .toISOString().slice(0, 10);
+}
+
+function lifecycle(input, current, defaultStart) {
+  const hasStartsAt = Object.hasOwn(input, "startsAt") && input.startsAt !== undefined;
+  const hasExpiresAt = Object.hasOwn(input, "expiresAt") && input.expiresAt !== undefined;
+  const hasAutoDelete = Object.hasOwn(input, "autoDelete") && input.autoDelete !== undefined;
+  const startsAt = dateOnly(hasStartsAt ? input.startsAt : current?.startsAt ?? defaultStart, "startsAt");
+  const autoDelete = hasAutoDelete ? input.autoDelete : Boolean(current?.autoDelete);
+  if (typeof autoDelete !== "boolean") throw new KeyStoreError("invalid_lifecycle", "autoDelete must be a boolean");
+  const expiresAt = autoDelete
+    ? addCalendarMonth(startsAt || defaultStart)
+    : dateOnly(hasExpiresAt ? input.expiresAt : current?.expiresAt ?? null, "expiresAt");
+  if (startsAt && expiresAt && expiresAt <= startsAt) {
+    throw new KeyStoreError("invalid_lifecycle", "expiresAt must be later than startsAt");
+  }
+  return { startsAt, expiresAt, autoDelete };
+}
+
+function lifecycleStatus(account, today = zonedDate()) {
+  if (!account.enabled) return "disabled";
+  if (account.startsAt && account.startsAt > today) return "pending";
+  if (account.expiresAt && account.expiresAt <= today) return "expired";
+  return "active";
+}
+
 function publicAccount(account) {
   return {
     id: account.id,
@@ -41,6 +97,10 @@ function publicAccount(account) {
     source: "stored",
     createdAt: account.createdAt,
     updatedAt: account.updatedAt,
+    startsAt: account.startsAt || null,
+    expiresAt: account.expiresAt || null,
+    autoDelete: Boolean(account.autoDelete),
+    lifecycleStatus: lifecycleStatus(account),
   };
 }
 
@@ -107,7 +167,10 @@ export class EncryptedKeyStore {
       const envelope = JSON.parse(await readFile(this.filePath, "utf8"));
       const payload = await decryptPayload(this.secret, envelope);
       if (!payload || !Array.isArray(payload.accounts)) throw new Error("Invalid key store payload");
-      this.accounts = payload.accounts;
+      this.accounts = payload.accounts.map((account) => ({
+        ...account,
+        ...lifecycle({}, account, typeof account.createdAt === "string" ? zonedDate(new Date(account.createdAt)) : null),
+      }));
     } catch (error) {
       if (error?.code !== "ENOENT") {
         throw new Error("Unable to decrypt the key store. Verify KEY_ENCRYPTION_SECRET and the data file.", { cause: error });
@@ -119,7 +182,7 @@ export class EncryptedKeyStore {
   list({ includeDisabled = true } = {}) {
     this.#assertInitialized();
     return this.accounts
-      .filter((account) => includeDisabled || account.enabled)
+      .filter((account) => includeDisabled || lifecycleStatus(account) === "active")
       .map(publicAccount);
   }
 
@@ -130,13 +193,14 @@ export class EncryptedKeyStore {
     return { ...publicAccount(account), key: account.key };
   }
 
-  async add({ label, key }) {
+  async add({ label, key, startsAt, expiresAt, autoDelete }) {
     return this.#mutate(async () => {
       const normalizedKey = normalizeKey(key);
       if (this.accounts.some((account) => account.key === normalizedKey)) {
         throw new KeyStoreError("duplicate_key", "This API key already exists", 409);
       }
       const timestamp = this.now().toISOString();
+      const dates = lifecycle({ startsAt, expiresAt, autoDelete }, null, zonedDate(this.now()));
       const account = {
         id: this.createId(),
         label: normalizeLabel(label),
@@ -144,6 +208,7 @@ export class EncryptedKeyStore {
         enabled: true,
         createdAt: timestamp,
         updatedAt: timestamp,
+        ...dates,
       };
       this.accounts.push(account);
       await this.#persist();
@@ -167,6 +232,7 @@ export class EncryptedKeyStore {
         if (typeof changes.enabled !== "boolean") throw new KeyStoreError("invalid_enabled", "enabled must be a boolean");
         account.enabled = changes.enabled;
       }
+      Object.assign(account, lifecycle(changes, account, zonedDate(new Date(account.createdAt))));
       account.updatedAt = this.now().toISOString();
       await this.#persist();
       return publicAccount(account);
@@ -180,6 +246,17 @@ export class EncryptedKeyStore {
       const [removed] = this.accounts.splice(index, 1);
       await this.#persist();
       return publicAccount(removed);
+    });
+  }
+
+  async purgeExpired(today = zonedDate()) {
+    return this.#mutate(async () => {
+      const removed = this.accounts.filter((account) => account.autoDelete && account.expiresAt && account.expiresAt <= today);
+      if (removed.length === 0) return [];
+      const removedIds = new Set(removed.map((account) => account.id));
+      this.accounts = this.accounts.filter((account) => !removedIds.has(account.id));
+      await this.#persist();
+      return removed.map(publicAccount);
     });
   }
 
@@ -215,7 +292,8 @@ export class EncryptedKeyStore {
         if (typeof account.enabled !== "boolean" || typeof account.createdAt !== "string" || typeof account.updatedAt !== "string") {
           throw new KeyStoreError("invalid_backup", "The backup account data is invalid");
         }
-        return { id: account.id, label, key, enabled: account.enabled, createdAt: account.createdAt, updatedAt: account.updatedAt };
+        const dates = lifecycle(account, null, zonedDate(new Date(account.createdAt)));
+        return { id: account.id, label, key, enabled: account.enabled, createdAt: account.createdAt, updatedAt: account.updatedAt, ...dates };
       });
       if (new Set(restored.map((account) => account.id)).size !== restored.length
         || new Set(restored.map((account) => account.key)).size !== restored.length) {

@@ -331,9 +331,37 @@ h1 {
 .key-form {
   margin-top: 17px;
   display: grid;
-  grid-template-columns: minmax(150px, 0.7fr) minmax(240px, 1.5fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 12px;
+}
+
+.key-primary-fields {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(300px, 1.5fr);
+  gap: 12px;
+}
+
+.lifecycle-fields {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(170px, 0.45fr)) minmax(220px, 1fr);
+  align-items: end;
+  gap: 12px;
+}
+
+.lifecycle-checkbox {
+  min-height: 42px;
+  align-items: center;
+}
+
+.dialog-lifecycle-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dialog-lifecycle-fields .lifecycle-checkbox {
+  grid-column: 1 / -1;
 }
 
 .field {
@@ -534,7 +562,7 @@ h1 {
 
 .account-list {
   display: grid;
-  grid-template-columns: minmax(190px, 0.9fr) minmax(330px, 1.45fr) minmax(120px, 0.55fr) max-content;
+  grid-template-columns: minmax(190px, 0.9fr) minmax(330px, 1.45fr) minmax(180px, 0.7fr) max-content;
   column-gap: 22px;
   border-top: 1px solid var(--line);
 }
@@ -649,6 +677,16 @@ h1 {
 .status-label.is-disabled {
   color: var(--ink-muted);
   background: var(--surface-muted);
+}
+
+.status-label.is-pending {
+  color: var(--warn);
+  background: rgba(180, 106, 18, 0.1);
+}
+
+.status-label.is-expired {
+  color: var(--danger);
+  background: rgba(184, 59, 54, 0.08);
 }
 
 .empty-state {
@@ -977,6 +1015,16 @@ footer {
 
   .key-form {
     grid-template-columns: 1fr;
+  }
+
+  .key-primary-fields,
+  .lifecycle-fields,
+  .dialog-lifecycle-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .dialog-lifecycle-fields .lifecycle-checkbox {
+    grid-column: auto;
   }
 
   .account-row {

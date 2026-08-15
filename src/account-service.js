@@ -14,6 +14,10 @@ function environmentAccount(apiKey) {
     source: "environment",
     createdAt: null,
     updatedAt: null,
+    startsAt: null,
+    expiresAt: null,
+    autoDelete: false,
+    lifecycleStatus: "active",
   };
 }
 
@@ -52,6 +56,8 @@ export class AccountService {
       ? { ...account, key: this.config.apiKey }
       : this.keyStore.getSecret(account.id);
     if (!secret.enabled) throw new UsageError("account_disabled", "Account is disabled", 409);
+    if (secret.lifecycleStatus === "pending") throw new UsageError("account_not_started", "Account is not active yet", 409);
+    if (secret.lifecycleStatus === "expired") throw new UsageError("account_expired", "Account has expired", 410);
 
     const signature = createHash("sha256").update(secret.key).digest("hex");
     let entry = this.usageServices.get(secret.id);
@@ -77,6 +83,8 @@ export class AccountService {
       ? { ...account, key: this.config.apiKey }
       : this.keyStore.getSecret(account.id);
     if (!secret.enabled) throw new UsageError("account_disabled", "Account is disabled", 409);
+    if (secret.lifecycleStatus === "pending") throw new UsageError("account_not_started", "Account is not active yet", 409);
+    if (secret.lifecycleStatus === "expired") throw new UsageError("account_expired", "Account has expired", 410);
     const service = this.createModelTestService({
       apiKey: secret.key,
       modelTestUrl: this.config.modelTestUrl,
@@ -123,6 +131,13 @@ export class AccountService {
     const result = await this.keyStore.restoreBackup(backup);
     this.usageServices.clear();
     return result;
+  }
+
+  async cleanupExpiredAccounts() {
+    if (!this.keyStore.writable || typeof this.keyStore.purgeExpired !== "function") return [];
+    const removed = await this.keyStore.purgeExpired();
+    for (const account of removed) this.usageServices.delete(account.id);
+    return removed;
   }
 
   #resolveAccount(accountId) {

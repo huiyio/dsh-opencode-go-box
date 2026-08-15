@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light">
     <meta name="theme-color" content="#f4f5f1">
     <title>OpenCode Go Key 管理</title>
-    <link rel="stylesheet" href="/styles.css?v=ui-label-2">
+    <link rel="stylesheet" href="/styles.css?v=lifecycle-1">
   </head>
   <body>
     <div class="app-shell">
@@ -46,15 +46,31 @@
         <section class="form-panel" aria-labelledby="add-title">
           <h2 id="add-title" data-copy="addTitle">添加 Key</h2>
           <form id="add-form" class="key-form">
-            <div class="field">
-              <label for="account-label" data-copy="label">账号名称</label>
-              <input id="account-label" name="label" maxlength="80" autocomplete="off" required>
-            </div>
-            <div class="field">
-              <label for="account-key" data-copy="apiKey">API Key</label>
-              <input id="account-key" name="key" type="password" minlength="8" maxlength="512" autocomplete="new-password" spellcheck="false" required>
+            <div class="key-primary-fields">
+              <div class="field">
+                <label for="account-label" data-copy="label">账号名称</label>
+                <input id="account-label" name="label" maxlength="80" autocomplete="off" required>
+              </div>
+              <div class="field">
+                <label for="account-key" data-copy="apiKey">API Key</label>
+                <input id="account-key" name="key" type="password" minlength="8" maxlength="512" autocomplete="new-password" spellcheck="false" required>
+              </div>
             </div>
             <button id="add-button" class="command-button" type="submit" data-copy="add">添加</button>
+            <div class="lifecycle-fields">
+              <div class="field">
+                <label for="account-starts-at" data-copy="startsAt">开通日期</label>
+                <input id="account-starts-at" name="startsAt" type="date">
+              </div>
+              <div class="field">
+                <label for="account-expires-at" data-copy="expiresAt">结束日期</label>
+                <input id="account-expires-at" name="expiresAt" type="date">
+              </div>
+              <label class="checkbox-field lifecycle-checkbox" for="account-auto-delete">
+                <input id="account-auto-delete" name="autoDelete" type="checkbox">
+                <span data-copy="autoDeleteMonth">一个月到期自动删除</span>
+              </label>
+            </div>
           </form>
         </section>
 
@@ -113,6 +129,20 @@
             <label for="edit-key" data-copy="replacementKey">替换 Key（留空则不修改）</label>
             <input id="edit-key" name="key" type="password" maxlength="512" autocomplete="new-password" spellcheck="false">
           </div>
+          <div class="lifecycle-fields dialog-lifecycle-fields">
+            <div class="field">
+              <label for="edit-starts-at" data-copy="startsAt">开通日期</label>
+              <input id="edit-starts-at" name="startsAt" type="date">
+            </div>
+            <div class="field">
+              <label for="edit-expires-at" data-copy="expiresAt">结束日期</label>
+              <input id="edit-expires-at" name="expiresAt" type="date">
+            </div>
+            <label class="checkbox-field lifecycle-checkbox" for="edit-auto-delete">
+              <input id="edit-auto-delete" name="autoDelete" type="checkbox">
+              <span data-copy="autoDeleteMonth">一个月到期自动删除</span>
+            </label>
+          </div>
           <label class="checkbox-field">
             <input id="edit-enabled" name="enabled" type="checkbox">
             <span data-copy="enabled">启用</span>
@@ -142,6 +172,6 @@
       </form>
     </dialog>
 
-    <script type="module" src="/admin.js?v=ui-data-1"></script>
+    <script type="module" src="/admin.js?v=lifecycle-2"></script>
   </body>
 </html>

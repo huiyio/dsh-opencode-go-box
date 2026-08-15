@@ -185,6 +185,15 @@ export function createHttpServer({ config, accountService, publicDir, logger = c
       return;
     }
 
+    if (typeof accountService.cleanupExpiredAccounts === "function") {
+      try {
+        await accountService.cleanupExpiredAccounts();
+      } catch (error) {
+        sendError(response, error, logger);
+        return;
+      }
+    }
+
     const publicLoginRoute = url.pathname === "/login" || url.pathname === "/login.html"
       || url.pathname === "/login.js" || url.pathname === "/styles.css";
     if (!publicLoginRoute && !isAuthorized(request, config)) {
