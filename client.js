@@ -196,9 +196,13 @@ window.__ModuleLoader__.load({
       barFill: { height: "100%", borderRadius: 4, background: "var(--dsw-alias-state-business-primary)", transition: "width .2s ease" },
       row: { display: "flex", justifyContent: "space-between", fontSize: 12, color: colors.text2, gap: 8 },
       button: { alignSelf: "flex-start", border: "1px solid var(--dsw-alias-border-l2)", color: colors.text, font: "inherit", cursor: "pointer", background: "transparent", borderRadius: 6, padding: "5px 12px" },
-      tabBar: { display: "flex", gap: 4, borderBottom: "1px solid var(--dsw-alias-border-l2)", paddingBottom: 0 },
+      panelHead: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 8, borderBottom: "1px solid var(--dsw-alias-border-l2)" },
+      tabBar: { display: "flex", gap: 4, paddingBottom: 0 },
       tab: { border: "none", background: "transparent", color: colors.muted, font: "inherit", fontSize: 13, cursor: "pointer", padding: "6px 14px", borderBottom: "2px solid transparent" },
       tabActive: { color: colors.text, borderBottomColor: "var(--dsw-alias-state-business-primary)" },
+      langRow: { display: "flex", gap: 4, paddingBottom: 6 },
+      langBtn: { border: "1px solid var(--dsw-alias-border-l2)", background: "transparent", color: colors.muted, font: "inherit", fontSize: 12, cursor: "pointer", borderRadius: 999, padding: "2px 10px" },
+      langBtnActive: { color: colors.text, borderColor: "var(--dsw-alias-state-business-primary)", background: "var(--dsw-alias-bg-layer-1)" },
       table: { width: "100%", borderCollapse: "collapse", fontSize: 12 },
       th: { textAlign: "left", color: colors.muted, fontWeight: 500, padding: "6px 8px", borderBottom: "1px solid var(--dsw-alias-border-l2)" },
       td: { padding: "6px 8px", borderBottom: "1px solid var(--dsw-alias-border-l2)", color: colors.text2, verticalAlign: "top" },
@@ -529,10 +533,52 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function makePanel(query, getApi, t) {
+    function makePanel(query, getApi, t, locale) {
       function UsagePanel() {
         const [tab, setTab] = React.useState("quota");
         const [state, setState] = React.useState({ kind: "loading" });
+        const [locales, setLocales] = React.useState(() => {
+          try {
+            return locale && typeof locale.getLocale === "function" ? locale.getLocale().locales : [];
+          } catch (e) {
+            return [];
+          }
+        });
+        const [lang, setLang] = React.useState(() => {
+          try {
+            return locale && typeof locale.getLocale === "function" ? locale.getLocale().active : "zh";
+          } catch (e) {
+            return "zh";
+          }
+        });
+
+        // Follow app-wide locale changes (this switch writes through the
+        // official setLocale, so the Settings → General → Language row and
+        // the dock widget stay in sync).
+        React.useEffect(() => {
+          if (!locale || typeof locale.subscribe !== "function") return undefined;
+          const sync = () => {
+            try {
+              const snapshot = locale.getLocale();
+              setLocales(snapshot.locales);
+              setLang(snapshot.active);
+            } catch (e) {
+              /* ignore */
+            }
+          };
+          return locale.subscribe(sync);
+        }, [locale]);
+
+        const pickLang = (id) => {
+          setLang(id);
+          if (locale && typeof locale.setLocale === "function") {
+            try {
+              locale.setLocale(id);
+            } catch (e) {
+              /* ignore */
+            }
+          }
+        };
 
         const load = React.useCallback(() => {
           setState({ kind: "loading" });
@@ -556,6 +602,14 @@ window.__ModuleLoader__.load({
           onClick: () => setTab(id),
         }, label);
 
+        const langSwitch = locales.length > 1 ? React.createElement("div", { style: styles.langRow },
+          locales.map((loc) => React.createElement("button", {
+            key: loc.id,
+            style: { ...styles.langBtn, ...(lang === loc.id ? styles.langBtnActive : {}) },
+            onClick: () => pickLang(loc.id),
+          }, loc.label)),
+        ) : null;
+
         let body = null;
         if (tab === "dsh") {
           body = React.createElement(DshPanel, { getApi, t });
@@ -571,9 +625,12 @@ window.__ModuleLoader__.load({
         }
 
         return React.createElement("div", { style: styles.wrap },
-          React.createElement("div", { style: styles.tabBar },
-            tabButton("quota", t("tabQuota")),
-            tabButton("dsh", t("tabDsh")),
+          React.createElement("div", { style: styles.panelHead },
+            React.createElement("div", { style: styles.tabBar },
+              tabButton("quota", t("tabQuota")),
+              tabButton("dsh", t("tabDsh")),
+            ),
+            langSwitch,
           ),
           body,
         );
@@ -659,7 +716,7 @@ window.__ModuleLoader__.load({
         return api.usage();
       };
       const timer = ctx.get("timer");
-      const UsagePanel = makePanel(query, getApi, t);
+      const UsagePanel = makePanel(query, getApi, t, ctx.locale);
       const DockWidget = makeDock(query, t, timer);
 
       ctx.slots.inject("settings.section", () => ctx.slots.register({

@@ -8,6 +8,7 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) web-GUI pl
 - **DSH session details**: token usage of every DeepSeek Harness session that used an opencode-go model, drillable down to **every model call** (turn/step level);
 - **Cache stats**: cache read (hit) / cache write shown at the totals, per-session, and per-call levels, plus a **cache hit rate** (cache read as a share of total input);
 - **Model filter**: filter sessions by model (chips) to see each model's usage and cache behavior, plus a **by-model comparison table**;
+- **Bilingual UI**: Chinese / English copy with a **one-click language switch** in the top-right of the panel (drives and persists the Settings → General → Language preference);
 - **Composer dock widget**: a live one-line quota readout under the composer (30s polling) that changes color by threshold.
 
 ## Features
