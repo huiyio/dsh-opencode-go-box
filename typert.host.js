@@ -1,7 +1,7 @@
 // Hand-written Typert host manifest for the opencodeUsage Remote.
 // The typert-loader imports this via package.json exports["./typert"] and
 // registers it into ctx.typert.local, which the Host gateway uses to claim
-// and dispatch the "opencodeUsage/usage" endpoint in strict mode.
+// and dispatch the opencodeUsage/* endpoints in strict mode.
 import { z } from "zod";
 
 const windowSchema = z.object({
@@ -10,15 +10,81 @@ const windowSchema = z.object({
   resetsAt: z.string().nullable(),
 });
 
-const resultSchema = z.object({
+const usageSchema = z.object({
+  rolling: windowSchema.nullable(),
+  weekly: windowSchema.nullable(),
+  monthly: windowSchema.nullable(),
+});
+
+const thresholdsSchema = z.object({
+  warn: z.number(),
+  danger: z.number(),
+});
+
+const limitsSchema = z.object({
+  rolling: z.string(),
+  weekly: z.string(),
+  monthly: z.string(),
+});
+
+const usageResultSchema = z.object({
   configured: z.boolean(),
   reason: z.string().nullable(),
   error: z.string().nullable(),
-  usage: z.object({
-    rolling: windowSchema.nullable(),
-    weekly: windowSchema.nullable(),
-    monthly: windowSchema.nullable(),
-  }).nullable(),
+  usage: usageSchema.nullable(),
+  thresholds: thresholdsSchema.nullable(),
+  limits: limitsSchema.nullable(),
+});
+
+const stepUsageSchema = z.object({
+  turn: z.number(),
+  step: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  reasoningTokens: z.number(),
+});
+
+const sessionTotalsSchema = z.object({
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  reasoningTokens: z.number(),
+});
+
+const sessionUsageSchema = z.object({
+  sessionId: z.string(),
+  title: z.string().nullable(),
+  cwd: z.string().nullable(),
+  agentPreset: z.string().nullable(),
+  provider: z.string().nullable(),
+  model: z.string().nullable(),
+  createdAt: z.string(),
+  messageCount: z.number(),
+  totals: sessionTotalsSchema,
+  steps: z.array(stepUsageSchema),
+});
+
+const dshUsageResultSchema = z.object({
+  ok: z.boolean(),
+  error: z.string().nullable(),
+  message: z.string().nullable(),
+  scanned: z.number(),
+  totals: sessionTotalsSchema.nullable(),
+  sessions: z.array(sessionUsageSchema),
+});
+
+const dshSessionMessagesResultSchema = z.object({
+  ok: z.boolean(),
+  error: z.string().nullable(),
+  message: z.string().nullable(),
+  sessionId: z.string().nullable(),
+  model: z.string().nullable(),
+  provider: z.string().nullable(),
+  createdAt: z.string().nullable(),
+  steps: z.array(stepUsageSchema),
 });
 
 export const TYPERT = {
@@ -35,8 +101,36 @@ export const TYPERT = {
       parameters: [],
       result: {
         mode: "strict",
-        typeSymbol: "dsh-opencode-go-usage#OpencodeUsageResult",
-        schema: resultSchema,
+        typeSymbol: "dsh-opencode-go-usage#UsageResult",
+        schema: usageResultSchema,
+      },
+    },
+    {
+      id: "dsh-opencode-go-usage#opencodeUsage/dshUsage",
+      service: "opencodeUsage",
+      namespace: "opencodeUsage",
+      method: "dshUsage",
+      invocation: { kind: "direct" },
+      parameters: [],
+      result: {
+        mode: "strict",
+        typeSymbol: "dsh-opencode-go-usage#DshUsageResult",
+        schema: dshUsageResultSchema,
+      },
+    },
+    {
+      id: "dsh-opencode-go-usage#opencodeUsage/dshSessionMessages",
+      service: "opencodeUsage",
+      namespace: "opencodeUsage",
+      method: "dshSessionMessages",
+      invocation: { kind: "direct" },
+      parameters: [
+        { name: "sessionId", schema: z.string() },
+      ],
+      result: {
+        mode: "strict",
+        typeSymbol: "dsh-opencode-go-usage#DshSessionMessagesResult",
+        schema: dshSessionMessagesResultSchema,
       },
     },
   ],

@@ -8,3 +8,6 @@
       config:
         baseUrl: https://opencode.ai/zen/go/v1/usage
         timeoutMs: 15000
+        warnPercent: 60
+        dangerPercent: 85
+        maxSessions: 30
