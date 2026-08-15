@@ -1,8 +1,7 @@
 services:
   opencode-go-balance:
-    build:
-      context: .
-    image: opencode-go-balance-web:local
+    image: "ghcr.io/huiyio/dsh-opencode-go-box:${IMAGE_TAG:-latest}"
+    pull_policy: always
     container_name: opencode-go-balance
     restart: unless-stopped
     ports:
@@ -40,3 +39,4 @@ services:
 
 volumes:
   opencode-go-data:
+    name: opencode-go-balance-data

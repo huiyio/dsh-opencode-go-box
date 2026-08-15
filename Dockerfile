@@ -3,6 +3,8 @@ FROM node:22-alpine
 LABEL org.opencontainers.image.title="OpenCode Go Balance"
 LABEL org.opencontainers.image.description="Standalone OpenCode Go quota dashboard"
 LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.source="https://github.com/huiyio/dsh-opencode-go-box"
+LABEL org.opencontainers.image.documentation="https://github.com/huiyio/dsh-opencode-go-box/blob/main/README.md"
 
 WORKDIR /app
 
