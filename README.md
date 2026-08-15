@@ -13,7 +13,7 @@
 
 ## 功能特性
 
-- 设置侧边栏新增 **"OpenCode Go"** 栏目（`settings.section` 贡献），内含「额度」「DSH 会话明细」两个标签页
+- 设置侧边栏新增 **"OpenCode Go"** 栏目（`settings.section` 贡献），内含「额度」「DSH 会话明细」两个标签页；**点击栏目标题即自动查询一次**（停留在该栏目时再次点击也会刷新）
 - Host 端 Typert Remote `opencodeUsage`：`usage` / `dshUsage` / `dshSessionMessages` 三个方法
 - **DSH 会话明细完全基于 DeepSeek Harness 自身的会话日志**（每条 `assistant/message` 事件自带 token 记账），不依赖本机是否安装 OpenCode 客户端，任何 DSH 部署都能用
 - 缓存统计：`cacheReadTokens`（命中）/ `cacheWriteTokens`（写入）按会话、按调用展示；命中率 = 缓存读取 ÷（非缓存输入 + 缓存读取）

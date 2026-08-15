@@ -13,7 +13,7 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) web-GUI pl
 
 ## Features
 
-- Settings sidebar section **"OpenCode Go"** (a `settings.section` contribution) with two tabs: **Quota** and **DSH sessions**
+- Settings sidebar section **"OpenCode Go"** (a `settings.section` contribution) with two tabs: **Quota** and **DSH sessions**; **clicking the section title re-queries once** (including re-clicks while already on the section)
 - Host-side Typert Remote `opencodeUsage` with three methods: `usage` / `dshUsage` / `dshSessionMessages`
 - **The DSH session details come entirely from DeepSeek Harness session logs** (every `assistant/message` event carries token accounting) — no local OpenCode client required, works on any DSH deployment
 - Cache stats: `cacheReadTokens` (hit) / `cacheWriteTokens` (write) per session and per call; hit rate = cache read ÷ (uncached input + cache read)
