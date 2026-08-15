@@ -1,0 +1,10 @@
+# dsh-opencode-go-usage bundle patch: adds the OpenCode Go usage plugin row
+# over the web profile layers. Applied after dsh-web-app; the profile's own
+# cordis.patch.yml and any --patch overlays can still override this row by id.
+
+- insert:
+    - id: opencode-go-usage
+      name: dsh-opencode-go-usage
+      config:
+        baseUrl: https://opencode.ai/zen/go/v1/usage
+        timeoutMs: 15000
