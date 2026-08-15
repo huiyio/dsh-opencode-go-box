@@ -3,6 +3,7 @@ import test from "node:test";
 import { isAuthorized } from "../worker/auth.js";
 import { decryptApiKey, encryptApiKey, fingerprintApiKey } from "../worker/crypto.js";
 import { WorkerError } from "../worker/errors.js";
+import { sessionCookie } from "../worker/session.js";
 import { listModels, normalizeUsage, testModel } from "../worker/upstream.js";
 
 const MASTER_SECRET = "worker-test-secret-with-more-than-32-characters";
@@ -32,6 +33,17 @@ test("Worker Basic authentication validates both credentials", async () => {
   });
   assert.equal(await isAuthorized(valid, env), true);
   assert.equal(await isAuthorized(invalid, env), false);
+});
+
+test("Worker session cookie authorizes the browser without Basic Auth", async () => {
+  const env = { WEB_USERNAME: "admin", WEB_PASSWORD: "strong-password" };
+  const setCookie = await sessionCookie(env, new Request("https://example.test/api/login"), Date.parse("2026-08-15T12:00:00.000Z"));
+  const cookie = setCookie.split(";", 1)[0];
+  const request = new Request("https://example.test/admin", { headers: { Cookie: cookie } });
+  const { isAuthorized } = await import("../worker/auth.js");
+  assert.equal(await isAuthorized(request, env), true);
+  const tampered = new Request("https://example.test/admin", { headers: { Cookie: `${cookie}x` } });
+  assert.equal(await isAuthorized(tampered, env), false);
 });
 
 test("Worker usage normalization clamps percentages and preserves reset times", () => {

@@ -183,6 +183,50 @@ export class EncryptedKeyStore {
     });
   }
 
+  async exportBackup() {
+    this.#assertWritable();
+    return {
+      format: "opencode-go-docker-encrypted-v1",
+      exportedAt: new Date().toISOString(),
+      store: await encryptPayload(this.secret, { version: 1, accounts: this.accounts }),
+    };
+  }
+
+  async restoreBackup(backup) {
+    return this.#mutate(async () => {
+      if (backup?.format !== "opencode-go-docker-encrypted-v1" || !backup.store) {
+        throw new KeyStoreError("invalid_backup", "This backup is not a Docker account backup");
+      }
+      let payload;
+      try {
+        payload = await decryptPayload(this.secret, backup.store);
+      } catch {
+        throw new KeyStoreError("invalid_backup", "The backup cannot be decrypted with the current KEY_ENCRYPTION_SECRET");
+      }
+      if (!payload || payload.version !== 1 || !Array.isArray(payload.accounts) || payload.accounts.length > 500) {
+        throw new KeyStoreError("invalid_backup", "The backup account data is invalid");
+      }
+      const restored = payload.accounts.map((account) => {
+        if (!account || typeof account !== "object" || typeof account.id !== "string" || account.id.length < 1 || account.id.length > 100) {
+          throw new KeyStoreError("invalid_backup", "The backup account data is invalid");
+        }
+        const key = normalizeKey(account.key);
+        const label = normalizeLabel(account.label);
+        if (typeof account.enabled !== "boolean" || typeof account.createdAt !== "string" || typeof account.updatedAt !== "string") {
+          throw new KeyStoreError("invalid_backup", "The backup account data is invalid");
+        }
+        return { id: account.id, label, key, enabled: account.enabled, createdAt: account.createdAt, updatedAt: account.updatedAt };
+      });
+      if (new Set(restored.map((account) => account.id)).size !== restored.length
+        || new Set(restored.map((account) => account.key)).size !== restored.length) {
+        throw new KeyStoreError("invalid_backup", "The backup contains duplicate accounts or keys");
+      }
+      this.accounts = restored;
+      await this.#persist();
+      return { count: restored.length };
+    });
+  }
+
   #assertInitialized() {
     if (!this.initialized) throw new Error("Key store is not initialized");
   }

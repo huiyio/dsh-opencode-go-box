@@ -1,4 +1,5 @@
 import { secureEqual } from "./crypto.js";
+import { sessionAuthorized } from "./session.js";
 
 function decodeBasicCredentials(header) {
   if (typeof header !== "string" || !header.startsWith("Basic ")) return null;
@@ -20,6 +21,7 @@ export function authConfigured(env) {
 
 export async function isAuthorized(request, env) {
   if (!authConfigured(env)) return false;
+  if (await sessionAuthorized(request, env)) return true;
   const credentials = decodeBasicCredentials(request.headers.get("Authorization"));
   if (!credentials) return false;
   const [usernameMatches, passwordMatches] = await Promise.all([

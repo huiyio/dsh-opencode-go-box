@@ -9,6 +9,11 @@ const copy = {
     add: "添加",
     accounts: "账号",
     accountCount: "数量",
+    backup: "备份账号",
+    restore: "恢复账号",
+    restoreConfirm: "恢复后会覆盖当前所有账号，确定继续吗？",
+    restoreDone: "账号已恢复。",
+    invalidBackup: "备份文件无效，或与当前部署的加密主密钥不匹配。",
     autoRefresh: "自动刷新",
     seconds: "秒",
     minutes: "分钟",
@@ -26,6 +31,7 @@ const copy = {
     cancel: "取消",
     save: "保存",
     back: "返回看板",
+    logout: "退出登录",
     empty: "还没有保存的 Key",
     errorTitle: "操作失败",
     adminDisabled: "请先配置 WEB_USERNAME、WEB_PASSWORD 和 KEY_ENCRYPTION_SECRET。",
@@ -62,6 +68,11 @@ const copy = {
     add: "Add",
     accounts: "Accounts",
     accountCount: "Count",
+    backup: "Back up accounts",
+    restore: "Restore accounts",
+    restoreConfirm: "Restoring will replace all current accounts. Continue?",
+    restoreDone: "Accounts restored.",
+    invalidBackup: "The backup is invalid or uses a different encryption secret.",
     autoRefresh: "Auto refresh",
     seconds: "seconds",
     minutes: "minutes",
@@ -79,6 +90,7 @@ const copy = {
     cancel: "Cancel",
     save: "Save",
     back: "Back to dashboard",
+    logout: "Sign out",
     empty: "No stored keys yet",
     errorTitle: "Operation failed",
     adminDisabled: "Configure WEB_USERNAME, WEB_PASSWORD, and KEY_ENCRYPTION_SECRET first.",
@@ -115,6 +127,7 @@ const errorBanner = document.querySelector("#admin-error");
 const errorTitle = document.querySelector("#admin-error-title");
 const errorMessage = document.querySelector("#admin-error-message");
 const dashboardLink = document.querySelector("#dashboard-link");
+const logoutButton = document.querySelector("#logout-button");
 const editDialog = document.querySelector("#edit-dialog");
 const editForm = document.querySelector("#edit-form");
 const editLabel = document.querySelector("#edit-label");
@@ -122,6 +135,9 @@ const editKey = document.querySelector("#edit-key");
 const editEnabled = document.querySelector("#edit-enabled");
 const editError = document.querySelector("#edit-error");
 const refreshAllButton = document.querySelector("#refresh-all");
+const backupButton = document.querySelector("#backup-button");
+const restoreButton = document.querySelector("#restore-button");
+const restoreInput = document.querySelector("#restore-input");
 const autoRefreshForm = document.querySelector("#auto-refresh-form");
 const autoRefreshEnabled = document.querySelector("#auto-refresh-enabled");
 const autoRefreshValue = document.querySelector("#auto-refresh-value");
@@ -176,8 +192,14 @@ function setLocale(nextLocale) {
   });
   dashboardLink.title = t("back");
   dashboardLink.setAttribute("aria-label", t("back"));
+  logoutButton.title = t("logout");
+  logoutButton.setAttribute("aria-label", t("logout"));
   refreshAllButton.title = t("refreshAll");
   refreshAllButton.setAttribute("aria-label", t("refreshAll"));
+  backupButton.title = t("backup");
+  backupButton.setAttribute("aria-label", t("backup"));
+  restoreButton.title = t("restore");
+  restoreButton.setAttribute("aria-label", t("restore"));
   renderAccounts();
 }
 
@@ -244,6 +266,7 @@ function applyAutoRefreshSetting() {
 function errorText(code) {
   if (code === "admin_disabled" || code === "key_store_disabled") return t("adminDisabled");
   if (code === "duplicate_key") return t("duplicate");
+  if (code === "invalid_backup") return t("invalidBackup");
   if (code?.startsWith("invalid_")) return t("invalid");
   return t("generic");
 }
@@ -603,6 +626,44 @@ async function runMutation(operation) {
   }
 }
 
+async function backupAccounts() {
+  if (busy) return;
+  busy = true;
+  backupButton.disabled = true;
+  restoreButton.disabled = true;
+  try {
+    const response = await fetch("/api/admin/backup", { headers: { Accept: "application/json" }, cache: "no-store" });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok || !payload.backup) throw payload?.error || { code: "invalid_response" };
+    const blob = new Blob([JSON.stringify(payload.backup, null, 2)], { type: "application/json" });
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = `opencode-go-balance-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(downloadUrl);
+  } catch (error) {
+    showError(error);
+  } finally {
+    busy = false;
+    backupButton.disabled = false;
+    restoreButton.disabled = false;
+  }
+}
+
+async function restoreAccounts(file) {
+  if (!file || busy || !window.confirm(t("restoreConfirm"))) return;
+  try {
+    const backup = JSON.parse(await file.text());
+    await runMutation(() => api("/api/admin/restore", {
+      method: "POST",
+      body: JSON.stringify({ backup }),
+    }));
+  } catch (error) {
+    showError(error?.code ? error : { code: "invalid_backup" });
+  }
+}
+
 function openEdit(account) {
   clearError();
   editingId = account.id;
@@ -670,6 +731,17 @@ document.querySelectorAll("[data-locale]").forEach((button) => {
   button.addEventListener("click", () => setLocale(button.dataset.locale));
 });
 refreshAllButton.addEventListener("click", () => loadAccountUsages(true));
+logoutButton.addEventListener("click", async () => {
+  await fetch("/api/logout", { method: "POST", cache: "no-store" }).catch(() => {});
+  window.location.replace("/login");
+});
+backupButton.addEventListener("click", backupAccounts);
+restoreButton.addEventListener("click", () => restoreInput.click());
+restoreInput.addEventListener("change", async () => {
+  const [file] = restoreInput.files || [];
+  restoreInput.value = "";
+  await restoreAccounts(file);
+});
 autoRefreshForm.addEventListener("submit", (event) => event.preventDefault());
 autoRefreshEnabled.addEventListener("change", applyAutoRefreshSetting);
 autoRefreshValue.addEventListener("change", applyAutoRefreshSetting);

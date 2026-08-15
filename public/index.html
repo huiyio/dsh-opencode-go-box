@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light">
     <meta name="theme-color" content="#f4f5f1">
     <title>OpenCode Go 额度</title>
-    <link rel="stylesheet" href="/styles.css?v=account-grid-1">
+    <link rel="stylesheet" href="/styles.css?v=auth-backup-1">
   </head>
   <body>
     <div class="app-shell">
@@ -20,6 +20,9 @@
             <button type="button" data-locale="zh" aria-pressed="true">中文</button>
             <button type="button" data-locale="en" aria-pressed="false">EN</button>
           </div>
+          <button id="logout-button" class="icon-button" type="button" title="退出登录" aria-label="退出登录">
+            <span aria-hidden="true">⇥</span>
+          </button>
           <a id="admin-link" class="icon-button" href="/admin?v=model-select-1" title="Key 管理" aria-label="Key 管理">
             <span aria-hidden="true">⚙</span>
           </a>
@@ -129,6 +132,6 @@
         <span id="cache-label"></span>
       </footer>
     </div>
-    <script type="module" src="/app.js?v=model-select-1"></script>
+    <script type="module" src="/app.js?v=auth-backup-1"></script>
   </body>
 </html>

@@ -16,7 +16,8 @@
 - 后台支持按秒或分钟设置自动刷新，设置保存在当前浏览器。
 - 从官方模型列表选择模型，再发送最小真实请求测试 Key 是否可调用。
 - Docker 使用 scrypt + AES-256-GCM 加密文件；Workers 使用 HKDF-SHA256 + AES-256-GCM 加密后保存到 D1。
-- Web 页面和接口使用环境变量配置的 Basic Auth 账号密码保护。
+- 浏览器使用账号密码登录页和 HttpOnly 会话 Cookie；Basic Auth 仍兼容命令行和旧客户端。
+- 后台可下载加密账号备份，也可上传备份恢复账号。
 - 提供中文和英文界面，支持 `linux/amd64` 和 `linux/arm64` 镜像。
 
 OpenCode Go 接口返回的是用量百分比，不是货币余额。本项目不会根据固定套餐金额推算余额。
@@ -89,6 +90,7 @@ curl http://127.0.0.1:3000/healthz
 - Key 管理：`http://服务器地址:3000/admin`
 
 浏览器会要求输入 `.env` 中的 `WEB_USERNAME` 和 `WEB_PASSWORD`。`/healthz` 专门用于容器健康检查，不要求认证。
+首次访问会打开登录页，不再依赖浏览器原生 Basic Auth 弹窗；原 Basic Auth 仍可用于脚本请求。
 
 ## 部署到 Cloudflare Workers
 
@@ -146,6 +148,8 @@ npm run worker:dev
 ```
 
 Workers 版的账号、加密 Key 和用量缓存存储在 D1。备份前先确认导出文件不会被提交：
+
+也可以直接在 `/admin` 点击下载图标备份，或选择之前下载的备份文件恢复。恢复会覆盖当前部署中的全部账号，只接受相同部署类型且能用当前 `KEY_ENCRYPTION_SECRET` 校验的加密备份。
 
 ```sh
 npx wrangler d1 export opencode-go-balance --remote --output opencode-go-balance-backup.sql
@@ -265,6 +269,8 @@ GET    /api/accounts                  可用账号元数据
 GET    /api/usage?account=<id>        指定账号额度
 GET    /api/admin/accounts            全部账号元数据
 GET    /api/admin/models              测试弹窗可选模型
+GET    /api/admin/backup              下载加密账号备份
+POST   /api/admin/restore             恢复加密账号备份
 POST   /api/admin/accounts            添加账号
 PATCH  /api/admin/accounts/<id>       编辑、换 Key 或启停
 DELETE /api/admin/accounts/<id>       删除账号
@@ -272,7 +278,7 @@ POST   /api/admin/accounts/<id>/test  按所选模型发送最小测试请求
 GET    /healthz                       匿名健康检查
 ```
 
-除 `/healthz` 外，所有页面和接口都受 Basic Auth 保护。所有 Key 相关响应只返回掩码，不返回明文。
+除 `/healthz`、`/login` 和登录接口外，所有页面和接口都受会话 Cookie 或 Basic Auth 保护。所有 Key 相关响应只返回掩码，不返回明文；备份文件也只包含加密密文。
 
 ## 安全说明
 
@@ -280,6 +286,7 @@ GET    /healthz                       匿名健康检查
 - 镜像以非 root 用户运行；Compose 使用只读根文件系统、丢弃 Linux capabilities 并禁止提权。
 - 只有 `/data` 数据卷可写，API Key 不会写入镜像、浏览器响应或应用日志。
 - “测试模型”会发送真实模型请求，可能消耗额度并触发限流；只有用户确认后才会发送。
+- 恢复备份会覆盖当前账号列表，执行前应确认备份来源和主密钥；额度缓存会在恢复后清空。
 - Workers Secret、`worker-credentials.json`、`.dev.vars`、D1 导出文件和 Docker `.env` 都不得提交到 Git；日志和响应不会输出完整 Key。
 - OpenCode Go 接口格式或地址未来可能变化，生产使用者应自行监控。
 

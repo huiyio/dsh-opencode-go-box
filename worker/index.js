@@ -2,6 +2,7 @@ import { authConfigured, isAuthorized } from "./auth.js";
 import { WorkerError } from "./errors.js";
 import { AccountStore } from "./store.js";
 import { fetchUsage, listModels, testModel } from "./upstream.js";
+import { clearSessionCookie, credentialsMatch, sessionCookie } from "./session.js";
 
 const DEFAULTS = Object.freeze({
   usageUrl: "https://opencode.ai/zen/go/v1/usage",
@@ -75,16 +76,38 @@ function methodNotAllowed(allow) {
   return json(405, { ok: false, error: { code: "method_not_allowed", message: "Method not allowed" } }, { Allow: allow });
 }
 
-async function readJsonBody(request) {
+async function readJsonBody(request, maxBytes = 16384) {
   if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) {
     throw new WorkerError("json_required", "Content-Type must be application/json", 415);
   }
   const declaredLength = Number(request.headers.get("Content-Length") || 0);
-  if (Number.isFinite(declaredLength) && declaredLength > 16384) {
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
     throw new WorkerError("body_too_large", "Request body is too large", 413);
   }
-  const bytes = await request.arrayBuffer();
-  if (bytes.byteLength > 16384) throw new WorkerError("body_too_large", "Request body is too large", 413);
+  if (!request.body) throw new WorkerError("invalid_json", "Request body must be a JSON object");
+  const reader = request.body.getReader();
+  const chunks = [];
+  let length = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.byteLength;
+      if (length > maxBytes) {
+        await reader.cancel();
+        throw new WorkerError("body_too_large", "Request body is too large", 413);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
   try {
     const value = JSON.parse(new TextDecoder().decode(bytes));
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("not an object");
@@ -141,6 +164,21 @@ async function handleApi(request, env, url) {
       thresholds: { warn: config.warnPercent, danger: config.dangerPercent },
       refreshIntervalMs: config.refreshIntervalMs,
     });
+  }
+
+  if (url.pathname === "/api/admin/backup" || url.pathname === "/api/admin/restore") {
+    if (!store.writable) throw new WorkerError("admin_disabled", "Account management is disabled", 503);
+    if (url.pathname === "/api/admin/backup" && request.method === "GET") {
+      return json(200, { ok: true, backup: await store.exportBackup() }, {
+        "Content-Disposition": 'attachment; filename="opencode-go-balance-backup.json"',
+      });
+    }
+    if (url.pathname === "/api/admin/restore" && request.method === "POST") {
+      const body = await readJsonBody(request, 8 * 1024 * 1024);
+      const result = await store.restoreBackup(body.backup || body);
+      return json(200, { ok: true, ...result });
+    }
+    return methodNotAllowed(url.pathname.endsWith("backup") ? "GET" : "POST");
   }
 
   if (url.pathname === "/api/admin/models") {
@@ -216,13 +254,39 @@ export default {
       return json(200, { status: "ok", configured, adminEnabled: Boolean(env.KEY_ENCRYPTION_SECRET), authConfigured: authConfigured(env) });
     }
 
-    if (!authConfigured(env)) {
+    if (url.pathname === "/api/login") {
+      if (request.method !== "POST") return methodNotAllowed("POST");
+      try {
+        const body = await readJsonBody(request);
+        if (!(await credentialsMatch(body.username, body.password, env))) {
+          return json(401, { ok: false, error: { code: "invalid_credentials", message: "Invalid username or password" } });
+        }
+        const next = typeof body.next === "string" && body.next.startsWith("/") && !body.next.startsWith("//")
+          ? body.next
+          : "/";
+        return json(200, { ok: true, next }, { "Set-Cookie": await sessionCookie(env, request) });
+      } catch (error) {
+        return reportError(error, request);
+      }
+    }
+
+    if (url.pathname === "/api/logout") {
+      if (request.method !== "POST") return methodNotAllowed("POST");
+      return json(200, { ok: true }, { "Set-Cookie": clearSessionCookie() });
+    }
+
+    const publicLoginRoute = url.pathname === "/login" || url.pathname === "/login.html" || url.pathname === "/login.js";
+    if (!publicLoginRoute && !authConfigured(env)) {
       return json(503, { ok: false, error: { code: "authentication_not_configured", message: "Web authentication is not configured" } });
     }
-    if (!(await isAuthorized(request, env))) {
-      return json(401, { ok: false, error: { code: "authentication_required", message: "Authentication required" } }, {
-        "WWW-Authenticate": 'Basic realm="OpenCode Go Balance", charset="UTF-8"',
-      });
+    if (!publicLoginRoute && !(await isAuthorized(request, env))) {
+      if ((url.pathname === "/" || url.pathname === "/admin") && (request.method === "GET" || request.method === "HEAD")) {
+        return new Response(null, {
+          status: 302,
+          headers: headers({ Location: `${url.origin}/login?next=${encodeURIComponent(`${url.pathname}${url.search}`)}` }),
+        });
+      }
+      return json(401, { ok: false, error: { code: "authentication_required", message: "Authentication required" } });
     }
 
     try {

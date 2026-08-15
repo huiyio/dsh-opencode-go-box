@@ -16,7 +16,8 @@ A standalone multi-account OpenCode Go quota dashboard deployable as either a Do
 - Configure admin auto-refresh in seconds or minutes, persisted in the browser.
 - Select an official model before sending a minimal real request to test a key.
 - Docker encrypts keys with scrypt and AES-256-GCM; Workers uses HKDF-SHA256 and AES-256-GCM with D1.
-- Protect the Web UI and APIs with environment-configured Basic Auth.
+- Use a username/password login page with an HttpOnly session cookie; Basic Auth remains available for scripts and legacy clients.
+- Download encrypted account backups and restore them from the admin page.
 - Support Chinese and English UI plus `linux/amd64` and `linux/arm64` images.
 
 The upstream API reports usage percentages, not a monetary balance.
@@ -65,6 +66,7 @@ curl http://127.0.0.1:3000/healthz
 - Key management: `http://your-server:3000/admin`
 
 The browser prompts for `WEB_USERNAME` and `WEB_PASSWORD`. `/healthz` remains unauthenticated for container health checks.
+The first browser visit now opens a login page instead of relying on the browser-native Basic Auth dialog; Basic Auth remains compatible with scripts.
 
 ## Deploy to Cloudflare Workers
 
@@ -122,6 +124,8 @@ npm run worker:dev
 ```
 
 Worker accounts, encrypted keys, and usage cache are stored in D1. Ensure the export path cannot be committed before backing up:
+
+You can also click the download icon in `/admin` and later select that JSON file to restore. Restore replaces all accounts in the current deployment and accepts only an encrypted backup from the same deployment type that validates with the current `KEY_ENCRYPTION_SECRET`.
 
 ```sh
 npx wrangler d1 export opencode-go-balance --remote --output opencode-go-balance-backup.sql
@@ -237,6 +241,8 @@ GET    /api/accounts                  Enabled account metadata
 GET    /api/usage?account=<id>        Selected account quota
 GET    /api/admin/accounts            All account metadata
 GET    /api/admin/models              Test-dialog model list
+GET    /api/admin/backup              Download encrypted account backup
+POST   /api/admin/restore             Restore encrypted account backup
 POST   /api/admin/accounts            Add an account
 PATCH  /api/admin/accounts/<id>       Edit, replace key, enable, or disable
 DELETE /api/admin/accounts/<id>       Delete an account
@@ -244,7 +250,7 @@ POST   /api/admin/accounts/<id>/test  Send a minimal request using the selected 
 GET    /healthz                       Public health check
 ```
 
-All pages and APIs except `/healthz` require Basic Auth. Key-related responses contain masked values only.
+All pages and APIs except `/healthz`, `/login`, and the login endpoint require a session cookie or Basic Auth. Key-related responses contain masked values only; backup files contain encrypted ciphertext only.
 
 ## Security
 
@@ -252,6 +258,7 @@ All pages and APIs except `/healthz` require Basic Auth. Key-related responses c
 - The image runs as a non-root user. Compose uses a read-only root filesystem, drops Linux capabilities, and prevents privilege escalation.
 - Only `/data` is writable. API keys are not written into the image, browser responses, or application logs.
 - A model test sends a real request and can consume quota or trigger rate limits. It runs only after user confirmation.
+- Restoring a backup replaces the current account list and clears usage cache; verify the backup source and encryption secret first.
 - Worker secrets, `worker-credentials.json`, `.dev.vars`, D1 exports, and Docker `.env` files must never be committed. Logs and responses never expose full keys.
 - The OpenCode Go API may change; production operators must monitor compatibility.
 

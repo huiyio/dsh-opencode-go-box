@@ -409,6 +409,41 @@ h1 {
   gap: 16px;
 }
 
+.login-main {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 70px 0;
+}
+
+.login-panel {
+  width: min(420px, 100%);
+  padding: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.login-panel h1 {
+  margin: 6px 0 26px;
+  font-size: clamp(30px, 5vw, 42px);
+}
+
+.login-form {
+  display: grid;
+  gap: 16px;
+}
+
+.login-form .command-button {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.login-form .dialog-error {
+  margin: 0;
+}
+
 .account-count {
   color: var(--ink-muted);
   font-size: 12px;
@@ -902,6 +937,14 @@ footer {
   .admin-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .login-main {
+    padding: 36px 0;
+  }
+
+  .login-panel {
+    padding: 24px;
   }
 
   .key-form {

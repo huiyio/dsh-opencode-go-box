@@ -1,9 +1,9 @@
-import { createHash, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { KeyStoreError } from "./key-store.js";
 import { ModelTestError } from "./model-test-service.js";
+import { clearSessionCookie, credentialsMatch, sessionAuthorized, sessionCookie } from "./session.js";
 import { UsageError } from "./usage-service.js";
 
 const STATIC_ROUTES = new Map([
@@ -11,9 +11,12 @@ const STATIC_ROUTES = new Map([
   ["/index.html", "index.html"],
   ["/admin", "admin.html"],
   ["/admin.html", "admin.html"],
+  ["/login", "login.html"],
+  ["/login.html", "login.html"],
   ["/styles.css", "styles.css"],
   ["/app.js", "app.js"],
   ["/admin.js", "admin.js"],
+  ["/login.js", "login.js"],
 ]);
 
 const CONTENT_TYPES = new Map([
@@ -53,10 +56,6 @@ class HttpError extends Error {
   }
 }
 
-function hash(value) {
-  return createHash("sha256").update(value).digest();
-}
-
 function credentialsFromRequest(request) {
   const header = request.headers.authorization;
   if (typeof header !== "string" || !header.startsWith("Basic ")) return null;
@@ -72,10 +71,10 @@ function credentialsFromRequest(request) {
 
 function isAuthorized(request, config) {
   if (!config.webUsername && !config.webPassword) return true;
+  if (sessionAuthorized(request, config)) return true;
   const credentials = credentialsFromRequest(request);
   if (!credentials) return false;
-  return timingSafeEqual(hash(credentials.username), hash(config.webUsername))
-    && timingSafeEqual(hash(credentials.password), hash(config.webPassword));
+  return credentialsMatch(credentials.username, credentials.password, config);
 }
 
 async function sendStatic(response, publicDir, filename, headOnly) {
@@ -93,20 +92,20 @@ async function sendStatic(response, publicDir, filename, headOnly) {
   }
 }
 
-async function readJsonBody(request) {
+async function readJsonBody(request, maxBytes = 16384) {
   const contentType = request.headers["content-type"] || "";
   if (!contentType.toLowerCase().startsWith("application/json")) {
     throw new HttpError("json_required", "Content-Type must be application/json", 415);
   }
   const declaredLength = Number(request.headers["content-length"] || 0);
-  if (Number.isFinite(declaredLength) && declaredLength > 16384) {
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
     throw new HttpError("body_too_large", "Request body is too large", 413);
   }
   const chunks = [];
   let length = 0;
   for await (const chunk of request) {
     length += chunk.length;
-    if (length > 16384) throw new HttpError("body_too_large", "Request body is too large", 413);
+    if (length > maxBytes) throw new HttpError("body_too_large", "Request body is too large", 413);
     chunks.push(chunk);
   }
   try {
@@ -156,10 +155,44 @@ export function createHttpServer({ config, accountService, publicDir, logger = c
       return;
     }
 
-    if (!isAuthorized(request, config)) {
-      sendJson(response, 401, { ok: false, error: { code: "authentication_required", message: "Authentication required" } }, {
-        "WWW-Authenticate": 'Basic realm="OpenCode Go Balance", charset="UTF-8"',
-      });
+    if (url.pathname === "/api/login") {
+      if (request.method !== "POST") {
+        sendJson(response, 405, { ok: false, error: { code: "method_not_allowed", message: "Method not allowed" } }, { Allow: "POST" });
+        return;
+      }
+      try {
+        const body = await readJsonBody(request);
+        if (!credentialsMatch(body.username, body.password, config)) {
+          sendJson(response, 401, { ok: false, error: { code: "invalid_credentials", message: "Invalid username or password" } });
+          return;
+        }
+        const next = typeof body.next === "string" && body.next.startsWith("/") && !body.next.startsWith("//")
+          ? body.next
+          : "/";
+        sendJson(response, 200, { ok: true, next }, { "Set-Cookie": sessionCookie(config, request) });
+      } catch (error) {
+        sendError(response, error, logger);
+      }
+      return;
+    }
+
+    if (url.pathname === "/api/logout") {
+      if (request.method !== "POST") {
+        sendJson(response, 405, { ok: false, error: { code: "method_not_allowed", message: "Method not allowed" } }, { Allow: "POST" });
+        return;
+      }
+      sendJson(response, 200, { ok: true }, { "Set-Cookie": clearSessionCookie() });
+      return;
+    }
+
+    const publicLoginRoute = url.pathname === "/login" || url.pathname === "/login.html" || url.pathname === "/login.js";
+    if (!publicLoginRoute && !isAuthorized(request, config)) {
+      if ((url.pathname === "/" || url.pathname === "/admin") && (request.method === "GET" || request.method === "HEAD")) {
+        response.writeHead(302, { Location: `/login?next=${encodeURIComponent(`${url.pathname}${url.search}`)}`, ...securityHeaders() });
+        response.end();
+        return;
+      }
+      sendJson(response, 401, { ok: false, error: { code: "authentication_required", message: "Authentication required" } });
       return;
     }
 
@@ -207,6 +240,33 @@ export function createHttpServer({ config, accountService, publicDir, logger = c
           ...result,
           thresholds: { warn: config.warnPercent, danger: config.dangerPercent },
           refreshIntervalMs: config.refreshIntervalMs,
+        });
+      } catch (error) {
+        sendError(response, error, logger);
+      }
+      return;
+    }
+
+    if (url.pathname === "/api/admin/backup" || url.pathname === "/api/admin/restore") {
+      if (!accountService.adminEnabled) {
+        sendJson(response, 503, { ok: false, error: { code: "admin_disabled", message: "Account management is disabled" } });
+        return;
+      }
+      try {
+        if (url.pathname === "/api/admin/backup" && request.method === "GET") {
+          sendJson(response, 200, { ok: true, backup: await accountService.exportBackup() }, {
+            "Content-Disposition": 'attachment; filename="opencode-go-balance-backup.json"',
+          });
+          return;
+        }
+        if (url.pathname === "/api/admin/restore" && request.method === "POST") {
+          const body = await readJsonBody(request, 8 * 1024 * 1024);
+          const result = await accountService.restoreBackup(body.backup || body);
+          sendJson(response, 200, { ok: true, ...result });
+          return;
+        }
+        sendJson(response, 405, { ok: false, error: { code: "method_not_allowed", message: "Method not allowed" } }, {
+          Allow: url.pathname.endsWith("backup") ? "GET" : "POST",
         });
       } catch (error) {
         sendError(response, error, logger);

@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light">
     <meta name="theme-color" content="#f4f5f1">
     <title>OpenCode Go Key 管理</title>
-    <link rel="stylesheet" href="/styles.css?v=account-grid-1">
+    <link rel="stylesheet" href="/styles.css?v=auth-backup-1">
   </head>
   <body>
     <div class="app-shell">
@@ -20,6 +20,9 @@
             <button type="button" data-locale="zh" aria-pressed="true">中文</button>
             <button type="button" data-locale="en" aria-pressed="false">EN</button>
           </div>
+          <button id="logout-button" class="icon-button" type="button" title="退出登录" aria-label="退出登录">
+            <span aria-hidden="true">⇥</span>
+          </button>
           <a id="dashboard-link" class="icon-button" href="/?v=model-select-1" title="返回看板" aria-label="返回看板">
             <span aria-hidden="true">←</span>
           </a>
@@ -60,6 +63,13 @@
             <h2 id="account-list-title" data-copy="accounts">账号</h2>
             <div class="account-list-tools">
               <span id="account-count" class="account-count">数量：0</span>
+              <button id="backup-button" class="icon-button compact-button" type="button" title="备份账号" aria-label="备份账号">
+                <span aria-hidden="true">↓</span>
+              </button>
+              <button id="restore-button" class="icon-button compact-button" type="button" title="恢复账号" aria-label="恢复账号">
+                <span aria-hidden="true">↑</span>
+              </button>
+              <input id="restore-input" type="file" accept="application/json,.json" hidden>
               <form id="auto-refresh-form" class="auto-refresh-form">
                 <label class="auto-refresh-toggle" for="auto-refresh-enabled">
                   <input id="auto-refresh-enabled" type="checkbox" checked>
@@ -130,6 +140,6 @@
       </form>
     </dialog>
 
-    <script type="module" src="/admin.js?v=admin-count-1"></script>
+    <script type="module" src="/admin.js?v=auth-backup-1"></script>
   </body>
 </html>

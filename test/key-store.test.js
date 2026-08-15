@@ -53,6 +53,24 @@ test("EncryptedKeyStore supports update, disable, duplicate detection, and remov
   assert.equal(store.list().length, 0);
 });
 
+test("EncryptedKeyStore exports and restores an encrypted backup", async (context) => {
+  const { store } = await temporaryStore(context);
+  await store.add({ label: "Primary", key: "sk-opencode-backup-1234" });
+  const backup = await store.exportBackup();
+  assert.equal(backup.format, "opencode-go-docker-encrypted-v1");
+  assert.equal(JSON.stringify(backup).includes("sk-opencode-backup-1234"), false);
+
+  await store.remove("account-1");
+  assert.equal(store.list().length, 0);
+  const restored = await store.restoreBackup(backup);
+  assert.deepEqual(restored, { count: 1 });
+  assert.equal(store.getSecret("account-1").key, "sk-opencode-backup-1234");
+  await assert.rejects(
+    store.restoreBackup({ ...backup, store: { ...backup.store, ciphertext: "tampered" } }),
+    (error) => error.code === "invalid_backup",
+  );
+});
+
 test("EncryptedKeyStore fails closed for missing and incorrect encryption secrets", async (context) => {
   const { store, filePath } = await temporaryStore(context);
   await store.add({ label: "Primary", key: "sk-opencode-secret-1234" });

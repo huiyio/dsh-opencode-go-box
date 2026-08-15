@@ -29,6 +29,7 @@ const copy = {
     days: "天",
     account: "账号",
     manageKeys: "Key 管理",
+    logout: "退出登录",
     noAccounts: "还没有可用账号，请先在后台添加 Key。",
   },
   en: {
@@ -61,6 +62,7 @@ const copy = {
     days: "d",
     account: "Account",
     manageKeys: "Manage keys",
+    logout: "Sign out",
     noAccounts: "No active accounts. Add a key in the admin page first.",
   },
 };
@@ -79,6 +81,7 @@ const cacheLabel = document.querySelector("#cache-label");
 const accountSelect = document.querySelector("#account-select");
 const accountKey = document.querySelector("#account-key");
 const adminLink = document.querySelector("#admin-link");
+const logoutButton = document.querySelector("#logout-button");
 
 function storedLocale() {
   try {
@@ -117,6 +120,8 @@ function setLocale(nextLocale) {
   refreshButton.setAttribute("aria-label", t("refresh"));
   adminLink.title = t("manageKeys");
   adminLink.setAttribute("aria-label", t("manageKeys"));
+  logoutButton.title = t("logout");
+  logoutButton.setAttribute("aria-label", t("logout"));
   if (latestPayload) render(latestPayload);
 }
 
@@ -303,6 +308,10 @@ document.querySelectorAll("[data-locale]").forEach((button) => {
   button.addEventListener("click", () => setLocale(button.dataset.locale));
 });
 refreshButton.addEventListener("click", () => loadUsage(true));
+logoutButton.addEventListener("click", async () => {
+  await fetch("/api/logout", { method: "POST", cache: "no-store" }).catch(() => {});
+  window.location.replace("/login");
+});
 accountSelect.addEventListener("change", () => {
   selectedAccountId = accountSelect.value;
   rememberAccountId(selectedAccountId);

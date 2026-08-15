@@ -52,9 +52,31 @@ test("HTTP server exposes health while protecting the dashboard and API", async 
   assert.equal(health.status, 200);
   assert.deepEqual(await health.json(), { status: "ok", configured: true, adminEnabled: false, uptimeSeconds: 0 });
 
-  const anonymous = await fetch(`${baseUrl}/`);
-  assert.equal(anonymous.status, 401);
-  assert.match(anonymous.headers.get("www-authenticate"), /OpenCode Go Balance/);
+  const anonymous = await fetch(`${baseUrl}/`, { redirect: "manual" });
+  assert.equal(anonymous.status, 302);
+  assert.match(anonymous.headers.get("location"), /^\/login\?next=/);
+
+  const loginPage = await fetch(`${baseUrl}/login`);
+  assert.equal(loginPage.status, 200);
+  assert.match(await loginPage.text(), /login-form/);
+
+  const invalidLogin = await fetch(`${baseUrl}/api/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "viewer", password: "wrong" }),
+  });
+  assert.equal(invalidLogin.status, 401);
+
+  const login = await fetch(`${baseUrl}/api/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "viewer", password: "secret", next: "/admin" }),
+  });
+  assert.equal(login.status, 200);
+  const sessionCookie = login.headers.get("set-cookie").split(";", 1)[0];
+  const sessionPage = await fetch(`${baseUrl}/`, { headers: { Cookie: sessionCookie } });
+  assert.equal(sessionPage.status, 200);
+  assert.match(await sessionPage.text(), /OpenCode Go/);
 
   const headers = { Authorization: authHeader("viewer", "secret") };
   const page = await fetch(`${baseUrl}/`, { headers });
@@ -133,6 +155,8 @@ test("admin account API creates, updates, and deletes without returning secrets"
     async addAccount(input) { calls.push(["add", input]); return account; },
     async updateAccount(id, input) { calls.push(["update", id, input]); return { ...account, ...input }; },
     async removeAccount(id) { calls.push(["remove", id]); return account; },
+    async exportBackup() { calls.push(["backup"]); return { format: "test-backup", accounts: [] }; },
+    async restoreBackup(backup) { calls.push(["restore", backup]); return { count: 1 }; },
   };
   const config = {
     apiKey: "",
@@ -188,4 +212,34 @@ test("admin account API creates, updates, and deletes without returning secrets"
     ["update", "stored-1", { enabled: false }],
     ["remove", "stored-1"],
   ]);
+});
+
+test("HTTP server downloads and restores an authenticated backup", async (context) => {
+  const calls = [];
+  const accountService = {
+    configured: true,
+    adminEnabled: true,
+    listAccounts() { return []; },
+    async exportBackup() { calls.push("backup"); return { format: "test-backup", accounts: [] }; },
+    async restoreBackup(value) { calls.push(["restore", value]); return { count: 2 }; },
+  };
+  const config = { apiKey: "", webUsername: "admin", webPassword: "password", warnPercent: 60, dangerPercent: 85, refreshIntervalMs: 30000 };
+  const server = createHttpServer({ config, accountService, publicDir, logger: { error() {} } });
+  context.after(() => server.close());
+  const baseUrl = await listen(server);
+  const headers = { Authorization: authHeader("admin", "password"), "Content-Type": "application/json" };
+
+  const backup = await fetch(`${baseUrl}/api/admin/backup`, { headers });
+  assert.equal(backup.status, 200);
+  assert.match(backup.headers.get("content-disposition"), /attachment/);
+  assert.deepEqual((await backup.json()).backup, { format: "test-backup", accounts: [] });
+
+  const restored = await fetch(`${baseUrl}/api/admin/restore`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ backup: { format: "test-backup", accounts: [] } }),
+  });
+  assert.equal(restored.status, 200);
+  assert.equal((await restored.json()).count, 2);
+  assert.deepEqual(calls, ["backup", ["restore", { format: "test-backup", accounts: [] }]]);
 });

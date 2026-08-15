@@ -115,6 +115,16 @@ export class AccountService {
     return account;
   }
 
+  async exportBackup() {
+    return this.keyStore.exportBackup();
+  }
+
+  async restoreBackup(backup) {
+    const result = await this.keyStore.restoreBackup(backup);
+    this.usageServices.clear();
+    return result;
+  }
+
   #resolveAccount(accountId) {
     const accounts = this.listAccounts({ includeDisabled: true });
     if (accounts.length === 0) {

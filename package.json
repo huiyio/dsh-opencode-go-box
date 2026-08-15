@@ -24,7 +24,7 @@
     "worker:dry-run": "wrangler deploy --dry-run",
     "worker:d1:local": "wrangler d1 migrations apply opencode-go-balance --local",
     "test": "node --test",
-    "check": "node --check server.js && node --check scripts/start-local-preview.js && node --check scripts/generate-worker-credentials.js && node --check src/config.js && node --check src/key-store.js && node --check src/account-service.js && node --check src/usage-service.js && node --check src/model-test-service.js && node --check src/http-server.js && node --check public/app.js && node --check public/admin.js && node --check worker/index.js && node --check worker/auth.js && node --check worker/crypto.js && node --check worker/errors.js && node --check worker/store.js && node --check worker/upstream.js"
+    "check": "node --check server.js && node --check scripts/start-local-preview.js && node --check scripts/generate-worker-credentials.js && node --check src/config.js && node --check src/key-store.js && node --check src/account-service.js && node --check src/usage-service.js && node --check src/model-test-service.js && node --check src/http-server.js && node --check src/session.js && node --check public/app.js && node --check public/admin.js && node --check public/login.js && node --check worker/index.js && node --check worker/auth.js && node --check worker/crypto.js && node --check worker/errors.js && node --check worker/session.js && node --check worker/store.js && node --check worker/upstream.js"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260815.1",

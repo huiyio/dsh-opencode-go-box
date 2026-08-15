@@ -187,4 +187,60 @@ export class AccountStore {
       accountId, JSON.stringify(value.usage), value.fetchedAt, expiresAt,
     ).run();
   }
+
+  async exportBackup() {
+    if (!this.writable) throw new WorkerError("key_store_disabled", "Account management is disabled", 503);
+    const result = await this.env.DB.prepare(`SELECT id, label, key_ciphertext, key_iv, key_salt,
+      key_fingerprint, key_suffix, enabled, created_at, updated_at FROM accounts ORDER BY created_at ASC`).all();
+    return {
+      format: "opencode-go-workers-encrypted-v1",
+      exportedAt: new Date().toISOString(),
+      accounts: result.results,
+    };
+  }
+
+  async restoreBackup(backup) {
+    if (!this.writable) throw new WorkerError("key_store_disabled", "Account management is disabled", 503);
+    if (backup?.format !== "opencode-go-workers-encrypted-v1" || !Array.isArray(backup.accounts) || backup.accounts.length > 500) {
+      throw new WorkerError("invalid_backup", "The backup account data is invalid");
+    }
+    const accounts = backup.accounts.map((account) => {
+      if (!account || typeof account !== "object"
+        || typeof account.id !== "string" || account.id.length < 1 || account.id.length > 100
+        || typeof account.label !== "string" || account.label.length < 1 || account.label.length > 80
+        || typeof account.key_ciphertext !== "string" || typeof account.key_iv !== "string" || typeof account.key_salt !== "string"
+        || typeof account.key_fingerprint !== "string" || typeof account.key_suffix !== "string"
+        || ![0, 1].includes(Number(account.enabled))
+        || typeof account.created_at !== "string" || typeof account.updated_at !== "string") {
+        throw new WorkerError("invalid_backup", "The backup account data is invalid");
+      }
+      return account;
+    });
+    if (new Set(accounts.map((account) => account.id)).size !== accounts.length
+      || new Set(accounts.map((account) => account.key_fingerprint)).size !== accounts.length) {
+      throw new WorkerError("invalid_backup", "The backup contains duplicate accounts or keys");
+    }
+    for (const account of accounts) {
+      const key = await decryptApiKey(this.env.KEY_ENCRYPTION_SECRET, account.id, {
+        ciphertext: account.key_ciphertext,
+        iv: account.key_iv,
+        salt: account.key_salt,
+      });
+      if (key.slice(-4) !== account.key_suffix || await fingerprintApiKey(this.env.KEY_ENCRYPTION_SECRET, key) !== account.key_fingerprint) {
+        throw new WorkerError("invalid_backup", "The backup key integrity check failed");
+      }
+    }
+    const statements = [
+      this.env.DB.prepare("DELETE FROM usage_cache"),
+      this.env.DB.prepare("DELETE FROM accounts"),
+      ...accounts.map((account) => this.env.DB.prepare(`INSERT INTO accounts (
+        id, label, key_ciphertext, key_iv, key_salt, key_fingerprint, key_suffix, enabled, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+        account.id, account.label, account.key_ciphertext, account.key_iv, account.key_salt,
+        account.key_fingerprint, account.key_suffix, Number(account.enabled), account.created_at, account.updated_at,
+      )),
+    ];
+    await this.env.DB.batch(statements);
+    return { count: accounts.length };
+  }
 }

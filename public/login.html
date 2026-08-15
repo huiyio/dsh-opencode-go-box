@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#f4f5f1">
+    <title>OpenCode Go 登录</title>
+    <link rel="stylesheet" href="/styles.css?v=login-1">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/login" aria-label="OpenCode Go">
+          <span class="brand-mark" aria-hidden="true">GO</span>
+          <span class="brand-name">OpenCode Go</span>
+        </a>
+      </header>
+      <main class="login-main">
+        <section class="login-panel" aria-labelledby="login-title">
+          <p class="eyebrow">后台登录</p>
+          <h1 id="login-title">OpenCode Go</h1>
+          <form id="login-form" class="login-form">
+            <label class="field">
+              <span>账号</span>
+              <input id="login-username" name="username" autocomplete="username" required>
+            </label>
+            <label class="field">
+              <span>密码</span>
+              <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+            </label>
+            <p id="login-error" class="dialog-error" role="alert" hidden>账号或密码错误</p>
+            <button id="login-submit" class="command-button" type="submit">登录</button>
+          </form>
+        </section>
+      </main>
+      <footer>
+        <span>OpenCode Go</span>
+      </footer>
+    </div>
+    <script type="module" src="/login.js?v=login-1"></script>
+  </body>
+</html>
