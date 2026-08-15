@@ -480,18 +480,23 @@ h1 {
 }
 
 .account-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(130px, 0.85fr) minmax(240px, 1.2fr) minmax(90px, 0.45fr) max-content;
+  column-gap: 18px;
   border-top: 1px solid var(--line);
 }
 
 .account-row {
+  grid-column: 1 / -1;
   min-height: 88px;
   display: grid;
-  grid-template-columns: minmax(130px, 0.85fr) minmax(240px, 1.2fr) minmax(90px, 0.45fr) auto;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: 18px;
   border-bottom: 1px solid var(--line);
+}
+
+.account-list > .empty-state {
+  grid-column: 1 / -1;
 }
 
 .quota-summary {
@@ -575,7 +580,8 @@ h1 {
 }
 
 .account-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(206px, 1fr) repeat(3, max-content);
   align-items: center;
   justify-content: flex-end;
   gap: 7px;
@@ -808,6 +814,22 @@ footer {
   to { transform: rotate(360deg); }
 }
 
+@media (max-width: 1000px) {
+  .account-list {
+    grid-template-columns: minmax(150px, 0.7fr) minmax(360px, 1.3fr);
+  }
+
+  .account-row {
+    padding: 15px 0;
+    row-gap: 12px;
+  }
+
+  .account-actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+}
+
 @media (max-width: 900px) {
   .quota-grid {
     grid-template-columns: 1fr;
@@ -892,6 +914,10 @@ footer {
     gap: 10px;
   }
 
+  .account-list {
+    grid-template-columns: 1fr;
+  }
+
   .account-list-tools {
     flex-wrap: wrap;
     justify-content: flex-end;
@@ -908,6 +934,7 @@ footer {
   }
 
   .account-actions {
+    display: flex;
     justify-content: flex-start;
     flex-wrap: wrap;
   }
