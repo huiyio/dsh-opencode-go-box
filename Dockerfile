@@ -13,7 +13,7 @@ ENV NODE_ENV=production \
 
 RUN mkdir -p /data && chown node:node /data
 
-COPY --chown=node:node package.json server.js ./
+COPY --chown=node:node package.json server.js LICENSE NOTICE.md ./
 COPY --chown=node:node src ./src
 COPY --chown=node:node public ./public
 

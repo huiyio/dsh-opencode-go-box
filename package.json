@@ -4,6 +4,13 @@
   "description": "Standalone Docker-ready OpenCode Go usage dashboard",
   "license": "MIT",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/huiyio/dsh-opencode-go-box.git"
+  },
+  "bugs": {
+    "url": "https://github.com/huiyio/dsh-opencode-go-box/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=22.0.0"

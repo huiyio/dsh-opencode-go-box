@@ -4,6 +4,9 @@
 
 A standalone Docker-ready multi-account OpenCode Go quota dashboard. It does not require DeepSeek Harness, Cordis, Typert, or a local OpenCode client.
 
+> [!IMPORTANT]
+> This repository is an independent fork and derivative of [yascitom/dsh-opencode-go-box](https://github.com/yascitom/dsh-opencode-go-box) `v0.3.2`. It is not an official continuation and does not represent the upstream author or OpenCode. See [NOTICE.md](NOTICE.md) for attribution, modification scope, issue ownership, user responsibilities, and disclaimers, and [LICENSE](LICENSE) for the governing license.
+
 - Add, edit, disable, and delete multiple API keys at `/admin`
 - Select an account and inspect its 5-hour, weekly, and monthly quota
 - Store keys in an AES-256-GCM encrypted Docker volume

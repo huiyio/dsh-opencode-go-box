@@ -4,6 +4,9 @@
 
 一个完全独立、可用 Docker 部署的 OpenCode Go 多账号额度看板。不依赖 DeepSeek Harness、Cordis、Typert 或本机 OpenCode 客户端。
 
+> [!IMPORTANT]
+> 本仓库是基于 [yascitom/dsh-opencode-go-box](https://github.com/yascitom/dsh-opencode-go-box) `v0.3.2` 的 Fork 和独立改造，不是上游官方续作，也不代表上游作者或 OpenCode 官方。项目来源、改造范围、问题归属、使用者责任和免责声明详见 [NOTICE.md](NOTICE.md)，许可条款见 [LICENSE](LICENSE)。
+
 - 在 `/admin` 后台添加、编辑、启停和删除多个 API Key
 - 前台按账号查看 5 小时、每周、每月用量和剩余百分比
 - Key 使用 AES-256-GCM 加密后保存到 Docker 数据卷
