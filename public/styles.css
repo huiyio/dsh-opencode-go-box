@@ -43,7 +43,7 @@ a:focus-visible {
 }
 
 .app-shell {
-  width: min(1180px, calc(100% - 40px));
+  width: min(1400px, calc(100% - 48px));
   min-height: 100vh;
   margin: 0 auto;
   display: flex;
@@ -296,7 +296,7 @@ h1 {
 }
 
 .admin-main {
-  width: min(920px, 100%);
+  width: min(1320px, 100%);
   margin: 0 auto;
 }
 
@@ -316,7 +316,7 @@ h1 {
 
 .form-panel {
   margin-bottom: 22px;
-  padding: 20px;
+  padding: 24px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
@@ -350,8 +350,8 @@ h1 {
 }
 
 .command-button {
-  min-height: 38px;
-  padding: 0 14px;
+  min-height: 42px;
+  padding: 0 16px;
   border: 1px solid var(--accent);
   border-radius: 6px;
   color: #ffffff;
@@ -524,8 +524,8 @@ h1 {
 
 .account-list {
   display: grid;
-  grid-template-columns: minmax(130px, 0.85fr) minmax(240px, 1.2fr) minmax(90px, 0.45fr) max-content;
-  column-gap: 18px;
+  grid-template-columns: minmax(190px, 0.9fr) minmax(330px, 1.45fr) minmax(120px, 0.55fr) max-content;
+  column-gap: 22px;
   border-top: 1px solid var(--line);
 }
 
@@ -545,18 +545,18 @@ h1 {
 .quota-summary {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(62px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(3, minmax(88px, 1fr));
+  gap: 8px;
 }
 
 .quota-metric {
   min-width: 0;
-  min-height: 48px;
+  min-height: 72px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 3px;
-  padding: 6px 8px;
+  gap: 4px;
+  padding: 9px 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface-muted);
@@ -564,26 +564,22 @@ h1 {
 
 .quota-metric span {
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 760;
 }
 
 .quota-metric .quota-reset {
-  overflow: hidden;
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 520;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .quota-metric strong {
-  overflow: hidden;
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 760;
   font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -612,19 +608,19 @@ h1 {
 }
 
 .account-identity strong {
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .account-identity code,
 .account-identity span,
 .account-details span {
   color: var(--ink-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .account-actions {
   display: grid;
-  grid-template-columns: minmax(206px, 1fr) repeat(3, max-content);
+  grid-template-columns: minmax(230px, 1fr) repeat(3, max-content);
   align-items: center;
   justify-content: flex-end;
   gap: 7px;
