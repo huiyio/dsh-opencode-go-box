@@ -596,37 +596,6 @@ window.__ModuleLoader__.load({
 
         React.useEffect(() => { load(); }, [load]);
 
-        // Clicking the OpenCode Go nav cell while it is ALREADY the active
-        // section re-renders nothing in the settings shell (React bails out on
-        // the same activeId), so the section would never re-query. Capture the
-        // click on our own nav cell (aria-current=true + our nav label) and
-        // refresh the current tab once. Switching sections from elsewhere
-        // still re-queries via the mount effect.
-        const [dshEpoch, setDshEpoch] = React.useState(0);
-        const lastClickReload = React.useRef(0);
-        const reload = React.useCallback(() => {
-          const now = Date.now();
-          if (now - lastClickReload.current < 5000) return; // debounce double-clicks
-          lastClickReload.current = now;
-          load();
-          setDshEpoch((n) => n + 1); // remount DshPanel when the DSH tab is visible
-        }, [load]);
-
-        React.useEffect(() => {
-          if (typeof document === "undefined") return undefined;
-          const onDocClick = (event) => {
-            const target = event && event.target;
-            if (!target || typeof target.closest !== "function") return;
-            const cell = target.closest("button[aria-current]");
-            if (!cell) return;
-            if ((cell.getAttribute("aria-current") || "") !== "true") return;
-            if ((cell.textContent || "").indexOf("OpenCode Go") === -1) return;
-            reload();
-          };
-          document.addEventListener("click", onDocClick, true);
-          return () => document.removeEventListener("click", onDocClick, true);
-        }, [reload]);
-
         const tabButton = (id, label) => React.createElement("button", {
           key: id,
           style: { ...styles.tab, ...(tab === id ? styles.tabActive : {}) },
@@ -643,7 +612,7 @@ window.__ModuleLoader__.load({
 
         let body = null;
         if (tab === "dsh") {
-          body = React.createElement(DshPanel, { key: dshEpoch, getApi, t });
+          body = React.createElement(DshPanel, { getApi, t });
         } else if (state.kind === "loading") {
           body = React.createElement("div", { style: styles.wrap }, React.createElement("p", { style: styles.hint }, t("loading")));
         } else if (state.kind === "failure") {
