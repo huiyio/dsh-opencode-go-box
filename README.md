@@ -153,6 +153,7 @@ curl https://你的-worker地址/healthz
 
 - 看板：`https://你的-worker地址/`
 - Key 管理：`https://你的-worker地址/admin`
+- 当前部署也绑定了自定义域名：`https://go.llmhost.net/` 和 `https://go.llmhost.net/admin`。`wrangler.jsonc` 中的 `custom_domain` 会让 Cloudflare 自动创建 DNS 记录并签发证书。
 - `/healthz`、登录页面、登录脚本和样式可匿名加载；登录接口用于建立会话。看板、后台和管理 API 需要会话 Cookie 或 Basic Auth。Workers 自动提供 HTTPS；仍应使用强密码。需要更严格的身份策略时可在外层再配置 Cloudflare Access。
 
 本地开发可复制 `.dev.vars.example` 为 Git 忽略的 `.dev.vars`，填写测试凭据后运行：

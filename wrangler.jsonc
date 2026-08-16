@@ -16,6 +16,12 @@
       "migrations_dir": "worker/migrations"
     }
   ],
+  "routes": [
+    {
+      "pattern": "go.llmhost.net",
+      "custom_domain": true
+    }
+  ],
   "vars": {
     "OPENCODE_USAGE_URL": "https://opencode.ai/zen/go/v1/usage",
     "OPENCODE_MODEL_TEST_URL": "https://opencode.ai/zen/go/v1/chat/completions",

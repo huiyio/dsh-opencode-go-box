@@ -129,6 +129,7 @@ curl https://your-worker.example/healthz
 
 - Dashboard: `https://your-worker.example/`
 - Key management: `https://your-worker.example/admin`
+- This deployment also uses the custom domain `https://go.llmhost.net/` and `https://go.llmhost.net/admin`. The `custom_domain` entry in `wrangler.jsonc` lets Cloudflare create the DNS record and issue the certificate automatically.
 - `/healthz`, the login page assets, and the login endpoint are public so the browser can establish a session; the dashboard, admin page, and management APIs require a session cookie or Basic Auth. Workers provides HTTPS automatically. Use a strong password; Cloudflare Access can be added as an outer identity layer when needed.
 
 For local development, copy `.dev.vars.example` to the Git-ignored `.dev.vars`, set test credentials, and run:
