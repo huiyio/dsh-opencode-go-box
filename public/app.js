@@ -30,7 +30,7 @@ const copy = {
     account: "账号",
     manageKeys: "Key 管理",
     logout: "退出登录",
-    noAccounts: "还没有可用账号，请先在后台添加 Key。",
+    noAccounts: "暂未授权任何账号。",
   },
   en: {
     eyebrow: "Live quota",
@@ -63,7 +63,7 @@ const copy = {
     account: "Account",
     manageKeys: "Manage keys",
     logout: "Sign out",
-    noAccounts: "No active accounts. Add a key in the admin page first.",
+    noAccounts: "No accounts have been assigned to you.",
   },
 };
 
@@ -304,6 +304,16 @@ async function loadAccounts() {
   }
 }
 
+async function loadIdentity() {
+  try {
+    const response = await fetch("/api/me", { headers: { Accept: "application/json" }, cache: "no-store" });
+    const payload = await response.json().catch(() => null);
+    adminLink.hidden = !response.ok || payload?.user?.role !== "admin";
+  } catch {
+    adminLink.hidden = true;
+  }
+}
+
 document.querySelectorAll("[data-locale]").forEach((button) => {
   button.addEventListener("click", () => setLocale(button.dataset.locale));
 });
@@ -327,6 +337,7 @@ window.setInterval(() => {
 }, 30000);
 
 setLocale(locale);
+loadIdentity();
 loadAccounts().then((hasAccounts) => {
   if (hasAccounts) loadUsage(false);
   else showError({ code: "no_accounts" });

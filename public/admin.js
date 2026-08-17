@@ -11,8 +11,8 @@ const copy = {
     accountCount: "数量",
     backup: "下载备份",
     restore: "恢复备份",
-    restoreConfirm: "恢复后会覆盖当前所有账号，确定继续吗？",
-    restoreDone: "账号已恢复。",
+    restoreConfirm: "恢复后会覆盖当前所有账号和用户，确定继续吗？",
+    restoreDone: "账号和用户已恢复。",
     invalidBackup: "备份文件无效，或与当前部署的加密主密钥不匹配。",
     autoRefresh: "自动刷新",
     seconds: "秒",
@@ -65,6 +65,21 @@ const copy = {
     autoDeleteEnabled: "到期自动删除",
     pending: "待开通",
     expired: "已到期",
+    usersTitle: "用户管理",
+    usersSubtitle: "用户只能查看已授权的账号额度，未授权时看不到任何账号数据",
+    username: "用户名",
+    password: "登录密码",
+    replacementPassword: "重置密码（留空则不修改）",
+    permissions: "可查看的账号",
+    addUser: "添加用户",
+    editUser: "编辑用户",
+    noPermissions: "未授权任何账号",
+    noPermissionOptions: "当前没有可授权的账号",
+    usersEmpty: "还没有创建用户",
+    userCount: "数量",
+    confirmRemoveUser: "确定删除用户“{username}”？删除后该用户会立即退出登录。",
+    duplicateUser: "这个用户名已经存在。",
+    invalidUser: "请检查用户名、密码和账号授权。",
   },
   en: {
     eyebrow: "Account management",
@@ -78,8 +93,8 @@ const copy = {
     accountCount: "Count",
     backup: "Download backup",
     restore: "Restore backup",
-    restoreConfirm: "Restoring will replace all current accounts. Continue?",
-    restoreDone: "Accounts restored.",
+    restoreConfirm: "Restoring will replace all current accounts and users. Continue?",
+    restoreDone: "Accounts and users restored.",
     invalidBackup: "The backup is invalid or uses a different encryption secret.",
     autoRefresh: "Auto refresh",
     seconds: "seconds",
@@ -132,6 +147,21 @@ const copy = {
     autoDeleteEnabled: "Deletes automatically at expiry",
     pending: "Pending",
     expired: "Expired",
+    usersTitle: "User management",
+    usersSubtitle: "Users can only view assigned accounts; unassigned users receive no account data",
+    username: "Username",
+    password: "Login password",
+    replacementPassword: "Reset password (leave empty to keep current)",
+    permissions: "Visible accounts",
+    addUser: "Add user",
+    editUser: "Edit user",
+    noPermissions: "No accounts assigned",
+    noPermissionOptions: "No accounts are available to assign",
+    usersEmpty: "No users yet",
+    userCount: "Count",
+    confirmRemoveUser: "Delete user “{username}”? Their active session will stop working immediately.",
+    duplicateUser: "This username already exists.",
+    invalidUser: "Check the username, password, and account permissions.",
   },
 };
 
@@ -169,10 +199,24 @@ const testForm = document.querySelector("#test-form");
 const testModelError = document.querySelector("#test-model-error");
 const testModelSelect = document.querySelector("#test-model-select");
 const testSubmit = document.querySelector("#test-submit");
+const userAddForm = document.querySelector("#user-add-form");
+const userAddButton = document.querySelector("#user-add-button");
+const userPermissions = document.querySelector("#user-permissions");
+const userList = document.querySelector("#user-list");
+const userCount = document.querySelector("#user-count");
+const userEditDialog = document.querySelector("#user-edit-dialog");
+const userEditForm = document.querySelector("#user-edit-form");
+const userEditUsername = document.querySelector("#user-edit-username");
+const userEditPassword = document.querySelector("#user-edit-password");
+const userEditEnabled = document.querySelector("#user-edit-enabled");
+const userEditPermissions = document.querySelector("#user-edit-permissions");
+const userEditError = document.querySelector("#user-edit-error");
 
 let locale = readStoredLocale();
 let accounts = [];
+let users = [];
 let editingId = null;
+let editingUserId = null;
 let testAccountTarget = null;
 let busy = false;
 let usageGeneration = 0;
@@ -223,6 +267,9 @@ function setLocale(nextLocale) {
   restoreButton.title = t("restore");
   restoreButton.setAttribute("aria-label", t("restore"));
   renderAccounts();
+  renderPermissionChoices(userPermissions, selectedPermissionIds(userPermissions));
+  renderPermissionChoices(userEditPermissions, selectedPermissionIds(userEditPermissions));
+  renderUsers();
 }
 
 function readAutoRefreshSetting() {
@@ -286,15 +333,22 @@ function applyAutoRefreshSetting() {
 }
 
 function errorText(code) {
-  if (code === "admin_disabled" || code === "key_store_disabled") return t("adminDisabled");
+  if (code === "admin_disabled" || code === "key_store_disabled" || code === "user_store_disabled") return t("adminDisabled");
   if (code === "duplicate_key") return t("duplicate");
+  if (code === "duplicate_username") return t("duplicateUser");
   if (code === "invalid_backup") return t("invalidBackup");
   if (code === "invalid_lifecycle") return t("invalid");
+  if (code === "invalid_username" || code === "invalid_password" || code === "invalid_permissions") return t("invalidUser");
   if (code?.startsWith("invalid_")) return t("invalid");
   return t("generic");
 }
 
 function showError(error) {
+  if (userEditDialog.open) {
+    userEditError.textContent = errorText(error?.code);
+    userEditError.hidden = false;
+    return;
+  }
   if (editDialog.open) {
     editError.textContent = errorText(error?.code);
     editError.hidden = false;
@@ -309,6 +363,8 @@ function clearError() {
   errorBanner.hidden = true;
   editError.hidden = true;
   editError.textContent = "";
+  userEditError.hidden = true;
+  userEditError.textContent = "";
 }
 
 async function api(path, options = {}) {
@@ -334,6 +390,118 @@ function actionButton(label, className, handler) {
   button.disabled = busy;
   button.addEventListener("click", handler);
   return button;
+}
+
+function selectedPermissionIds(container) {
+  return [...container.querySelectorAll('input[type="checkbox"]:checked')].map((input) => input.value);
+}
+
+function renderPermissionChoices(container, selectedIds = []) {
+  const selected = new Set(selectedIds);
+  container.replaceChildren();
+  if (accounts.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "permission-empty";
+    empty.textContent = t("noPermissionOptions");
+    container.append(empty);
+    return;
+  }
+  for (const account of accounts) {
+    const label = document.createElement("label");
+    label.className = "permission-option";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = account.id;
+    checkbox.checked = selected.has(account.id);
+    const text = document.createElement("span");
+    text.textContent = `${account.label} (${account.maskedKey})`;
+    label.append(checkbox, text);
+    container.append(label);
+  }
+}
+
+function renderUsers() {
+  userList.replaceChildren();
+  userCount.textContent = locale === "zh"
+    ? `${t("userCount")}：${users.length}`
+    : `${t("userCount")}: ${users.length}`;
+  if (users.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = t("usersEmpty");
+    userList.append(empty);
+    return;
+  }
+  const accountById = new Map(accounts.map((account) => [account.id, account]));
+  for (const user of users) {
+    const row = document.createElement("article");
+    row.className = "user-row";
+    const identity = document.createElement("div");
+    identity.className = "user-identity";
+    const username = document.createElement("strong");
+    username.textContent = user.username;
+    const status = document.createElement("span");
+    status.className = `status-label${user.enabled ? "" : " is-disabled"}`;
+    status.textContent = user.enabled ? t("enabled") : t("disabled");
+    identity.append(username, status);
+
+    const permissions = document.createElement("div");
+    permissions.className = "user-permission-summary";
+    const assigned = user.accountIds.map((id) => accountById.get(id)?.label).filter(Boolean);
+    permissions.textContent = assigned.length > 0 ? assigned.join("、") : t("noPermissions");
+
+    const actions = document.createElement("div");
+    actions.className = "user-actions";
+    actions.append(
+      actionButton(t("editUser"), "secondary", () => openUserEdit(user)),
+      actionButton(t("remove"), "danger", () => removeUser(user)),
+    );
+    row.append(identity, permissions, actions);
+    userList.append(row);
+  }
+}
+
+async function loadUsers({ silent = false } = {}) {
+  try {
+    const payload = await api("/api/admin/users");
+    users = payload.users;
+    renderUsers();
+  } catch (error) {
+    if (!silent) showError(error);
+  }
+}
+
+function openUserEdit(user) {
+  clearError();
+  editingUserId = user.id;
+  userEditUsername.value = user.username;
+  userEditPassword.value = "";
+  userEditEnabled.checked = user.enabled;
+  renderPermissionChoices(userEditPermissions, user.accountIds);
+  userEditDialog.showModal();
+}
+
+async function runUserMutation(operation) {
+  if (busy) return;
+  busy = true;
+  userAddButton.disabled = true;
+  clearError();
+  renderUsers();
+  try {
+    await operation();
+    await loadUsers();
+  } catch (error) {
+    showError(error);
+  } finally {
+    busy = false;
+    userAddButton.disabled = false;
+    renderUsers();
+  }
+}
+
+async function removeUser(user) {
+  if (!window.confirm(t("confirmRemoveUser").replace("{username}", user.username))) return;
+  await runUserMutation(() => api(`/api/admin/users/${encodeURIComponent(user.id)}`, { method: "DELETE" }));
 }
 
 function formatRemaining(value) {
@@ -623,6 +791,8 @@ async function loadAccounts() {
     accounts = payload.accounts;
     clearError();
     renderAccounts();
+    renderPermissionChoices(userPermissions, selectedPermissionIds(userPermissions));
+    await loadUsers();
     await loadAccountUsages(false);
   } catch (error) {
     showError(error);
@@ -692,6 +862,8 @@ async function runMutation(operation) {
     await operation();
     const payload = await api("/api/admin/accounts");
     accounts = payload.accounts;
+    renderPermissionChoices(userPermissions, selectedPermissionIds(userPermissions));
+    await loadUsers({ silent: true });
     await loadAccountUsages(false);
   } catch (error) {
     showError(error);
@@ -803,6 +975,48 @@ editForm.addEventListener("submit", async (event) => {
     editDialog.close();
     editKey.value = "";
   });
+});
+
+userAddForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formData = new FormData(userAddForm);
+  await runUserMutation(async () => {
+    await api("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify({
+        username: formData.get("username"),
+        password: formData.get("password"),
+        enabled: document.querySelector("#user-enabled").checked,
+        accountIds: selectedPermissionIds(userPermissions),
+      }),
+    });
+    userAddForm.reset();
+    document.querySelector("#user-enabled").checked = true;
+    renderPermissionChoices(userPermissions, []);
+  });
+});
+
+userEditForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const changes = {
+    username: userEditUsername.value,
+    enabled: userEditEnabled.checked,
+    accountIds: selectedPermissionIds(userEditPermissions),
+  };
+  if (userEditPassword.value) changes.password = userEditPassword.value;
+  await runUserMutation(async () => {
+    await api(`/api/admin/users/${encodeURIComponent(editingUserId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(changes),
+    });
+    userEditDialog.close();
+    userEditPassword.value = "";
+  });
+});
+
+document.querySelector("#user-edit-cancel").addEventListener("click", () => {
+  clearError();
+  userEditDialog.close();
 });
 
 document.querySelector("#edit-cancel").addEventListener("click", () => {

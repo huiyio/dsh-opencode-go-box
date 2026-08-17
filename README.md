@@ -17,7 +17,8 @@
 - 从官方模型列表选择模型，再发送最小真实请求测试 Key 是否可调用。
 - Docker 使用 scrypt + AES-256-GCM 加密文件；Workers 使用 HKDF-SHA256 + AES-256-GCM 加密后保存到 D1。
 - 浏览器使用账号密码登录页和 HttpOnly 会话 Cookie；Basic Auth 仍兼容命令行和旧客户端。
-- 后台可下载加密账号备份，也可上传备份恢复账号。
+- 管理员可创建、编辑、停用和删除查看用户，并逐个分配可查询的 Key；未授权用户不会收到任何账号或额度数据。
+- 后台可下载加密账号与用户备份，也可上传备份恢复。
 - 每个 Key 可设置开通日期和结束日期，也可选择一个日历月后到期自动删除。
 - 提供中文和英文界面，支持 `linux/amd64` 和 `linux/arm64` 镜像。
 
@@ -36,6 +37,17 @@ OpenCode Go `/zen/go/v1/usage` 接口返回的是用量百分比，不是货币�
 - `一个月到期自动删除`：以开通日期为起点计算一个日历月，到期后删除 Key 和对应额度缓存。例如 1 月 31 日会计算为 2 月最后一天。
 
 日期按 `YYYY-MM-DD` 保存并以 `Asia/Shanghai` 日期为准。Docker 进程和 Cloudflare Workers Cron 都每分钟清理一次；受平台调度影响，实际删除可能有短暂延迟。旧账号和旧备份升级后默认使用原添加日期作为开通日期，并保持“不过期、不自动删除”。自动删除属于不可恢复操作，生产环境应先下载加密备份并单独保管原 `KEY_ENCRYPTION_SECRET`。
+
+## 用户与权限
+
+环境变量 `WEB_USERNAME` / `WEB_PASSWORD` 始终是系统管理员，拥有 Key、用户、测试和备份的全部权限。管理员可在 `/admin` 的“用户管理”区域创建普通查看用户，并为每个用户勾选可查询账号。
+
+- 普通用户只能访问看板，不能访问 `/admin` 或任何 `/api/admin/*` 接口。
+- `/api/accounts` 只返回当前用户已授权且处于可用状态的账号。
+- `/api/usage` 会再次校验账号授权，手动修改账号 ID 不能越权查询。
+- 未分配账号时返回空列表，页面显示“暂未授权任何账号”，不会回退到任意全局账号。
+- 用户被停用或删除后，旧会话在下一次请求时立即失效。
+- Docker 用户密码使用 scrypt 加盐哈希并存入独立 AES-256-GCM 加密文件；Workers 使用每用户随机盐和由 `KEY_ENCRYPTION_SECRET` 派生的 HKDF/HMAC-SHA256 校验值保存在 D1。接口和备份页面不会返回密码或密码哈希。
 
 ## 使用预构建镜像
 
@@ -163,12 +175,14 @@ npm run worker:d1:local
 npm run worker:dev
 ```
 
-Workers 版的账号、加密 Key 和用量缓存存储在 D1。备份前先确认导出文件不会被提交：
+Workers 版的账号、加密 Key、用户权限和用量缓存存储在 D1。升级已有部署时，先备份 D1，再执行迁移和部署：
 
-也可以直接在 `/admin` 点击“下载备份”保存 JSON 文件，或点击“恢复备份”选择之前下载的文件。恢复会覆盖当前部署中的全部账号，并清空用量缓存；只接受相同部署类型且能用当前 `KEY_ENCRYPTION_SECRET` 校验的加密备份。Docker 和 Workers 备份格式不互通。
+也可以直接在 `/admin` 点击“下载备份”保存 JSON 文件，或点击“恢复备份”选择之前下载的文件。新版完整备份包含账号、加密 Key、用户、密码哈希和授权关系，其中用户部分再次使用 `KEY_ENCRYPTION_SECRET` 加密。恢复会覆盖当前部署中的全部账号和用户，并清空用量缓存；仍兼容旧版仅账号备份。Docker 和 Workers 备份格式不互通。
 
 ```sh
 npx wrangler d1 export opencode-go-balance --remote --output opencode-go-balance-backup.sql
+npx wrangler d1 migrations apply opencode-go-balance --remote
+npx wrangler deploy
 ```
 
 还必须单独安全备份 `KEY_ENCRYPTION_SECRET`；只有 D1 导出文件或只有主密钥都无法恢复 Key。
@@ -281,12 +295,17 @@ npm run preview
 ```text
 GET    /                              Web 看板
 GET    /admin                         Key 管理后台
+GET    /api/me                        当前登录身份和角色
 GET    /api/accounts                  可用账号元数据
 GET    /api/usage?account=<id>        指定账号额度
+GET    /api/admin/users               用户与账号授权列表
+POST   /api/admin/users               添加普通用户
+PATCH  /api/admin/users/<id>          编辑用户、重置密码、启停或修改授权
+DELETE /api/admin/users/<id>          删除用户并立即使会话失效
 GET    /api/admin/accounts            全部账号元数据
 GET    /api/admin/models              测试弹窗可选模型
-GET    /api/admin/backup              下载加密账号备份
-POST   /api/admin/restore             恢复加密账号备份
+GET    /api/admin/backup              下载加密账号与用户备份
+POST   /api/admin/restore             恢复加密账号与用户备份
 POST   /api/admin/accounts            添加账号
 PATCH  /api/admin/accounts/<id>       编辑、换 Key 或启停
 DELETE /api/admin/accounts/<id>       删除账号
@@ -294,7 +313,7 @@ POST   /api/admin/accounts/<id>/test  按所选模型发送最小测试请求
 GET    /healthz                       匿名健康检查
 ```
 
-除 `/healthz`、`/login` 和登录接口外，所有页面和接口都受会话 Cookie 或 Basic Auth 保护。所有 Key 相关响应只返回掩码，不返回明文；备份文件也只包含加密密文。
+除 `/healthz`、`/login` 和登录接口外，所有页面和接口都受会话 Cookie 或 Basic Auth 保护。普通用户只获得被授权账号的只读额度接口；管理员接口在服务端校验角色。所有 Key 相关响应只返回掩码，不返回明文；备份文件也只包含加密密文。
 
 ## 安全说明
 
@@ -302,7 +321,7 @@ GET    /healthz                       匿名健康检查
 - 镜像以非 root 用户运行；Compose 使用只读根文件系统、丢弃 Linux capabilities 并禁止提权。
 - 只有 `/data` 数据卷可写，API Key 不会写入镜像、浏览器响应或应用日志。
 - “测试模型”会发送真实模型请求，可能消耗额度并触发限流；只有用户确认后才会发送。
-- 恢复备份会覆盖当前账号列表，执行前应确认备份来源和主密钥；额度缓存会在恢复后清空。
+- 恢复备份会覆盖当前账号和用户列表，执行前应确认备份来源和主密钥；额度缓存会在恢复后清空。
 - Workers Secret、`worker-credentials.json`、`.dev.vars`、D1 导出文件和 Docker `.env` 都不得提交到 Git；日志和响应不会输出完整 Key。
 - OpenCode Go 接口格式或地址未来可能变化，生产使用者应自行监控。
 

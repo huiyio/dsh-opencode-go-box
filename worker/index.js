@@ -1,8 +1,9 @@
-import { authConfigured, isAuthorized } from "./auth.js";
+import { authConfigured, authenticateCredentials, resolvePrincipal } from "./auth.js";
 import { WorkerError } from "./errors.js";
 import { AccountStore } from "./store.js";
+import { UserStore } from "./user-store.js";
 import { fetchUsage, listModels, testModel } from "./upstream.js";
-import { clearSessionCookie, credentialsMatch, sessionCookie } from "./session.js";
+import { clearSessionCookie, sessionCookie } from "./session.js";
 
 const DEFAULTS = Object.freeze({
   usageUrl: "https://opencode.ai/zen/go/v1/usage",
@@ -137,18 +138,38 @@ function reportError(error, request) {
   });
 }
 
-async function handleApi(request, env, url) {
-  const config = readConfig(env);
-  const store = new AccountStore(env);
+function filterAccounts(accounts, principal) {
+  if (principal.role === "admin") return accounts;
+  const allowed = new Set(principal.accountIds);
+  return accounts.filter((account) => allowed.has(account.id));
+}
+
+async function handleApi(request, env, url, principal, store, userStore, config) {
+  if (url.pathname === "/api/me") {
+    if (request.method !== "GET") return methodNotAllowed("GET");
+    return json(200, { ok: true, user: { username: principal.username, role: principal.role } });
+  }
 
   if (url.pathname === "/api/accounts") {
     if (request.method !== "GET") return methodNotAllowed("GET");
-    return json(200, { ok: true, accounts: await store.list(), adminEnabled: store.writable });
+    return json(200, {
+      ok: true,
+      accounts: filterAccounts(await store.list(), principal),
+      adminEnabled: principal.role === "admin" && store.writable,
+    });
   }
 
   if (url.pathname === "/api/usage") {
     if (request.method !== "GET") return methodNotAllowed("GET");
-    const account = await store.resolve(url.searchParams.get("account"));
+    const allowedAccounts = filterAccounts(await store.list(), principal);
+    const requestedId = url.searchParams.get("account");
+    const selected = requestedId
+      ? allowedAccounts.find((account) => account.id === requestedId)
+      : allowedAccounts[0];
+    if (!selected) {
+      throw new WorkerError(requestedId ? "account_not_found" : "no_accounts", requestedId ? "Account not found" : "No accounts are assigned", 404);
+    }
+    const account = await store.getSecret(selected.id);
     if (!account.enabled) throw new WorkerError("account_disabled", "Account is disabled", 409);
     if (account.lifecycleStatus === "pending") throw new WorkerError("account_not_started", "Account is not active yet", 409);
     if (account.lifecycleStatus === "expired") throw new WorkerError("account_expired", "Account has expired", 410);
@@ -168,16 +189,43 @@ async function handleApi(request, env, url) {
     });
   }
 
+  if (url.pathname === "/api/admin/users" || url.pathname.startsWith("/api/admin/users/")) {
+    if (!userStore.writable) throw new WorkerError("user_store_disabled", "User management is disabled", 503);
+    const id = url.pathname.startsWith("/api/admin/users/")
+      ? decodeURIComponent(url.pathname.slice("/api/admin/users/".length))
+      : "";
+    if (!id && request.method === "GET") return json(200, { ok: true, users: await userStore.list() });
+    if (!id && request.method === "POST") return json(201, { ok: true, user: await userStore.add(await readJsonBody(request)) });
+    if (id && request.method === "PATCH") return json(200, { ok: true, user: await userStore.update(id, await readJsonBody(request)) });
+    if (id && request.method === "DELETE") return json(200, { ok: true, user: await userStore.remove(id) });
+    return methodNotAllowed(id ? "PATCH, DELETE" : "GET, POST");
+  }
+
   if (url.pathname === "/api/admin/backup" || url.pathname === "/api/admin/restore") {
     if (!store.writable) throw new WorkerError("admin_disabled", "Account management is disabled", 503);
     if (url.pathname === "/api/admin/backup" && request.method === "GET") {
-      return json(200, { ok: true, backup: await store.exportBackup() }, {
+      const backup = {
+        format: "opencode-go-full-backup-v2",
+        platform: "workers",
+        exportedAt: new Date().toISOString(),
+        accountBackup: await store.exportBackup(),
+        userBackup: await userStore.exportBackup(),
+      };
+      return json(200, { ok: true, backup }, {
         "Content-Disposition": 'attachment; filename="opencode-go-balance-backup.json"',
       });
     }
     if (url.pathname === "/api/admin/restore" && request.method === "POST") {
       const body = await readJsonBody(request, 8 * 1024 * 1024);
-      const result = await store.restoreBackup(body.backup || body);
+      const backup = body.backup || body;
+      let result;
+      if (backup?.format === "opencode-go-full-backup-v2" && backup.platform === "workers") {
+        result = await store.restoreBackup(backup.accountBackup);
+        result = { ...result, ...(await userStore.restoreBackup(backup.userBackup)) };
+      } else {
+        result = await store.restoreBackup(backup);
+        await userStore.retainAccounts();
+      }
       return json(200, { ok: true, ...result });
     }
     return methodNotAllowed(url.pathname.endsWith("backup") ? "GET" : "POST");
@@ -203,12 +251,8 @@ async function handleApi(request, env, url) {
       throw new WorkerError("bad_request", "Invalid account ID");
     }
     const action = parts[1] || "";
-    if (!id && request.method === "GET") {
-      return json(200, { ok: true, accounts: await store.list({ includeDisabled: true }) });
-    }
-    if (!id && request.method === "POST") {
-      return json(201, { ok: true, account: await store.add(await readJsonBody(request)) });
-    }
+    if (!id && request.method === "GET") return json(200, { ok: true, accounts: await store.list({ includeDisabled: true }) });
+    if (!id && request.method === "POST") return json(201, { ok: true, account: await store.add(await readJsonBody(request)) });
     if (id && action === "test" && request.method === "POST") {
       const body = await readJsonBody(request);
       const account = await store.getSecret(id);
@@ -219,12 +263,8 @@ async function handleApi(request, env, url) {
       const { key: _key, ...publicAccount } = account;
       return json(200, { ok: true, valid: true, modelTest: { account: publicAccount, ...modelTest } });
     }
-    if (id && !action && request.method === "PATCH") {
-      return json(200, { ok: true, account: await store.update(id, await readJsonBody(request)) });
-    }
-    if (id && !action && request.method === "DELETE") {
-      return json(200, { ok: true, account: await store.remove(id) });
-    }
+    if (id && !action && request.method === "PATCH") return json(200, { ok: true, account: await store.update(id, await readJsonBody(request)) });
+    if (id && !action && request.method === "DELETE") return json(200, { ok: true, account: await store.remove(id) });
     return methodNotAllowed(action === "test" ? "POST" : id ? "PATCH, DELETE" : "GET, POST");
   }
 
@@ -258,17 +298,20 @@ export default {
       return json(200, { status: "ok", configured, adminEnabled: Boolean(env.KEY_ENCRYPTION_SECRET), authConfigured: authConfigured(env) });
     }
 
+    const userStore = new UserStore(env);
     if (url.pathname === "/api/login") {
       if (request.method !== "POST") return methodNotAllowed("POST");
       try {
         const body = await readJsonBody(request);
-        if (!(await credentialsMatch(body.username, body.password, env))) {
+        const principal = await authenticateCredentials(body.username, body.password, env, userStore);
+        if (!principal) {
           return json(401, { ok: false, error: { code: "invalid_credentials", message: "Invalid username or password" } });
         }
-        const next = typeof body.next === "string" && body.next.startsWith("/") && !body.next.startsWith("//")
+        const requestedNext = typeof body.next === "string" && body.next.startsWith("/") && !body.next.startsWith("//")
           ? body.next
           : "/";
-        return json(200, { ok: true, next }, { "Set-Cookie": await sessionCookie(env, request) });
+        const next = principal.role === "admin" || !requestedNext.startsWith("/admin") ? requestedNext : "/";
+        return json(200, { ok: true, next }, { "Set-Cookie": await sessionCookie(env, request, principal) });
       } catch (error) {
         return reportError(error, request);
       }
@@ -284,7 +327,8 @@ export default {
     if (!publicLoginRoute && !authConfigured(env)) {
       return json(503, { ok: false, error: { code: "authentication_not_configured", message: "Web authentication is not configured" } });
     }
-    if (!publicLoginRoute && !(await isAuthorized(request, env))) {
+    const principal = publicLoginRoute ? null : await resolvePrincipal(request, env, userStore);
+    if (!publicLoginRoute && !principal) {
       if ((url.pathname === "/" || url.pathname === "/admin") && (request.method === "GET" || request.method === "HEAD")) {
         return new Response(null, {
           status: 302,
@@ -293,12 +337,20 @@ export default {
       }
       return json(401, { ok: false, error: { code: "authentication_required", message: "Authentication required" } });
     }
+    const adminResource = url.pathname === "/admin" || url.pathname === "/admin.html" || url.pathname === "/admin.js"
+      || url.pathname.startsWith("/api/admin/");
+    if (adminResource && principal.role !== "admin") {
+      return json(403, { ok: false, error: { code: "admin_required", message: "Administrator access is required" } });
+    }
 
     try {
+      const store = new AccountStore(env);
       if (url.pathname === "/" || url.pathname === "/admin" || url.pathname.startsWith("/api/")) {
-        await new AccountStore(env).cleanupExpired();
+        await store.cleanupExpired();
       }
-      if (url.pathname.startsWith("/api/")) return await handleApi(request, env, url);
+      if (url.pathname.startsWith("/api/")) {
+        return await handleApi(request, env, url, principal, store, userStore, readConfig(env));
+      }
       return await serveAsset(request, env, url);
     } catch (error) {
       return reportError(error, request);

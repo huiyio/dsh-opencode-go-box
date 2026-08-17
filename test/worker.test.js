@@ -4,6 +4,7 @@ import { isAuthorized } from "../worker/auth.js";
 import { decryptApiKey, encryptApiKey, fingerprintApiKey } from "../worker/crypto.js";
 import { WorkerError } from "../worker/errors.js";
 import { sessionCookie } from "../worker/session.js";
+import { hashUserPassword, verifyUserPassword } from "../worker/user-store.js";
 import { listModels, normalizeUsage, testModel } from "../worker/upstream.js";
 
 const MASTER_SECRET = "worker-test-secret-with-more-than-32-characters";
@@ -44,6 +45,16 @@ test("Worker session cookie authorizes the browser without Basic Auth", async ()
   assert.equal(await isAuthorized(request, env), true);
   const tampered = new Request("https://example.test/admin", { headers: { Cookie: `${cookie}x` } });
   assert.equal(await isAuthorized(tampered, env), false);
+});
+
+test("Worker user passwords use salted secret-keyed verifiers", async () => {
+  const first = await hashUserPassword("strong-password", MASTER_SECRET);
+  const second = await hashUserPassword("strong-password", MASTER_SECRET);
+  assert.notEqual(first.salt, second.salt);
+  assert.notEqual(first.hash, second.hash);
+  assert.equal(await verifyUserPassword("strong-password", first.hash, first.salt, MASTER_SECRET), true);
+  assert.equal(await verifyUserPassword("wrong-password", first.hash, first.salt, MASTER_SECRET), false);
+  assert.equal(await verifyUserPassword("strong-password", first.hash, first.salt, `${MASTER_SECRET}-different`), false);
 });
 
 test("Worker usage normalization clamps percentages and preserves reset times", () => {

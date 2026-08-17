@@ -4,6 +4,7 @@ import { AccountService } from "./src/account-service.js";
 import { readConfig } from "./src/config.js";
 import { createHttpServer } from "./src/http-server.js";
 import { EncryptedKeyStore } from "./src/key-store.js";
+import { EncryptedUserStore } from "./src/user-store.js";
 
 const config = readConfig();
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -12,14 +13,25 @@ const keyStore = new EncryptedKeyStore({
   secret: config.keyEncryptionSecret,
 });
 await keyStore.init();
+const userStore = new EncryptedUserStore({
+  filePath: join(config.dataDir, "users.enc.json"),
+  secret: config.keyEncryptionSecret,
+  reservedUsername: config.webUsername,
+});
+await userStore.init();
 const accountService = new AccountService({ config, keyStore });
 const server = createHttpServer({
   config,
   accountService,
+  userStore,
   publicDir: join(currentDir, "public"),
 });
 const cleanupTimer = setInterval(() => {
-  accountService.cleanupExpiredAccounts().catch((error) => console.error("Failed to delete expired accounts", error));
+  accountService.cleanupExpiredAccounts()
+    .then(async (removed) => {
+      for (const account of removed) await userStore.revokeAccount(account.id);
+    })
+    .catch((error) => console.error("Failed to delete expired accounts", error));
 }, 60_000);
 cleanupTimer.unref();
 

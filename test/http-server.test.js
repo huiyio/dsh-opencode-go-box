@@ -245,3 +245,70 @@ test("HTTP server downloads and restores an authenticated backup", async (contex
   assert.equal((await restored.json()).count, 2);
   assert.deepEqual(calls, ["backup", ["restore", { format: "test-backup", accounts: [] }]]);
 });
+
+test("viewer sessions only expose assigned accounts and cannot access administrator routes", async (context) => {
+  const viewer = { id: "user-1", username: "customer", enabled: true, accountIds: ["account-1"] };
+  const userStore = {
+    writable: true,
+    async authenticate(username, password) {
+      return username === viewer.username && password === "viewer-password" && viewer.enabled ? { ...viewer } : null;
+    },
+    getEnabledById(id) {
+      return id === viewer.id && viewer.enabled ? { ...viewer } : null;
+    },
+    list() { return [{ ...viewer }]; },
+    async revokeAccount() {},
+  };
+  const usageCalls = [];
+  const accounts = [
+    { id: "account-1", label: "Assigned", maskedKey: "••••••••1111", enabled: true },
+    { id: "account-2", label: "Private", maskedKey: "••••••••2222", enabled: true },
+  ];
+  const accountService = {
+    configured: true,
+    adminEnabled: true,
+    listAccounts() { return accounts; },
+    async getUsage(id) {
+      usageCalls.push(id);
+      return { account: accounts.find((account) => account.id === id), usage: {}, fetchedAt: "2026-08-17T08:00:00.000Z", cached: false };
+    },
+  };
+  const config = {
+    apiKey: "",
+    webUsername: "admin",
+    webPassword: "admin-password",
+    warnPercent: 60,
+    dangerPercent: 85,
+    refreshIntervalMs: 30000,
+  };
+  const server = createHttpServer({ config, accountService, userStore, publicDir, logger: { error() {} } });
+  context.after(() => server.close());
+  const baseUrl = await listen(server);
+
+  const login = await fetch(`${baseUrl}/api/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "customer", password: "viewer-password", next: "/admin" }),
+  });
+  assert.equal(login.status, 200);
+  assert.equal((await login.clone().json()).next, "/");
+  const cookie = login.headers.get("set-cookie").split(";", 1)[0];
+  const headers = { Cookie: cookie };
+
+  const identity = await fetch(`${baseUrl}/api/me`, { headers });
+  assert.deepEqual((await identity.json()).user, { username: "customer", role: "viewer" });
+  const visible = await fetch(`${baseUrl}/api/accounts`, { headers });
+  assert.deepEqual((await visible.json()).accounts.map((account) => account.id), ["account-1"]);
+  assert.equal((await fetch(`${baseUrl}/api/usage?account=account-1`, { headers })).status, 200);
+  assert.equal((await fetch(`${baseUrl}/api/usage?account=account-2`, { headers })).status, 404);
+  assert.deepEqual(usageCalls, ["account-1"]);
+  assert.equal((await fetch(`${baseUrl}/admin`, { headers })).status, 403);
+  assert.equal((await fetch(`${baseUrl}/api/admin/accounts`, { headers })).status, 403);
+
+  viewer.accountIds = [];
+  const empty = await fetch(`${baseUrl}/api/accounts`, { headers });
+  assert.deepEqual((await empty.json()).accounts, []);
+  assert.equal((await fetch(`${baseUrl}/api/usage`, { headers })).status, 404);
+  viewer.enabled = false;
+  assert.equal((await fetch(`${baseUrl}/api/accounts`, { headers })).status, 401);
+});

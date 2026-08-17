@@ -17,7 +17,8 @@ A standalone multi-account OpenCode Go quota dashboard deployable as either a Do
 - Select an official model before sending a minimal real request to test a key.
 - Docker encrypts keys with scrypt and AES-256-GCM; Workers uses HKDF-SHA256 and AES-256-GCM with D1.
 - Use a username/password login page with an HttpOnly session cookie; Basic Auth remains available for scripts and legacy clients.
-- Download encrypted account backups and restore them from the admin page.
+- Create, edit, disable, and delete viewer users, assigning account-level key visibility to each user. Unassigned users receive no account or quota data.
+- Download encrypted account and user backups and restore them from the admin page.
 - Set start and end dates per key, with optional automatic deletion after one calendar month.
 - Support Chinese and English UI plus `linux/amd64` and `linux/arm64` images.
 
@@ -36,6 +37,17 @@ Each stored key can be configured in the admin page with:
 - `Delete automatically after one month`: calculates one calendar month from the start date and deletes the key plus its usage cache at expiry. January 31, for example, becomes the last day of February.
 
 Dates are stored as `YYYY-MM-DD` and evaluated in the `Asia/Shanghai` time zone. The Docker process and a Cloudflare Workers Cron both clean up every minute; platform scheduling can introduce a short delay. Existing accounts and older backups migrate with their original creation date as the start date and remain non-expiring with automatic deletion disabled. Automatic deletion is irreversible, so download an encrypted backup and retain the original `KEY_ENCRYPTION_SECRET` separately.
+
+## Users and permissions
+
+`WEB_USERNAME` / `WEB_PASSWORD` always identify the system administrator, who retains full key, user, model-test, and backup access. The administrator can create viewer users in `/admin` and assign visible accounts with checkboxes.
+
+- Viewers can use only the dashboard and cannot access `/admin` or `/api/admin/*`.
+- `/api/accounts` returns only assigned active accounts.
+- `/api/usage` checks the assignment again, so changing an account ID manually cannot bypass authorization.
+- A user with no assignments receives an empty account list; the service never falls back to a global account.
+- Disabling or deleting a user invalidates their existing session on the next request.
+- Docker hashes user passwords with scrypt inside a separate AES-256-GCM encrypted file. Workers stores per-user salted HKDF/HMAC-SHA256 verifiers keyed from `KEY_ENCRYPTION_SECRET` in D1. Passwords and password hashes are never returned by the user APIs.
 
 ## Deploy the published image
 
@@ -139,12 +151,14 @@ npm run worker:d1:local
 npm run worker:dev
 ```
 
-Worker accounts, encrypted keys, and usage cache are stored in D1. Ensure the export path cannot be committed before backing up:
+Worker accounts, encrypted keys, user permissions, and usage cache are stored in D1. Back up D1 before applying migrations to an existing deployment:
 
-You can also click `Download backup` in `/admin` and later choose that JSON file with `Restore backup`. Restore replaces all accounts in the current deployment and clears the usage cache. It accepts only an encrypted backup from the same deployment type that validates with the current `KEY_ENCRYPTION_SECRET`. Docker and Workers backup formats are intentionally incompatible.
+You can also click `Download backup` in `/admin` and later choose that JSON file with `Restore backup`. A current full backup includes accounts, encrypted keys, users, password hashes, and permission assignments; the user portion is encrypted again with `KEY_ENCRYPTION_SECRET`. Restore replaces all accounts and users and clears the usage cache. Legacy account-only backups remain accepted. Docker and Workers backup formats are intentionally incompatible.
 
 ```sh
 npx wrangler d1 export opencode-go-balance --remote --output opencode-go-balance-backup.sql
+npx wrangler d1 migrations apply opencode-go-balance --remote
+npx wrangler deploy
 ```
 
 Back up `KEY_ENCRYPTION_SECRET` separately. Neither the D1 export nor the secret can recover keys by itself.
@@ -253,12 +267,17 @@ The preview listens only on `127.0.0.1:57726` and stores local data under the Gi
 ```text
 GET    /                              Dashboard
 GET    /admin                         Key management
+GET    /api/me                        Current identity and role
 GET    /api/accounts                  Enabled account metadata
 GET    /api/usage?account=<id>        Selected account quota
+GET    /api/admin/users               Users and account assignments
+POST   /api/admin/users               Add a viewer user
+PATCH  /api/admin/users/<id>          Edit user, reset password, enable, or assign accounts
+DELETE /api/admin/users/<id>          Delete user and invalidate their session
 GET    /api/admin/accounts            All account metadata
 GET    /api/admin/models              Test-dialog model list
-GET    /api/admin/backup              Download encrypted account backup
-POST   /api/admin/restore             Restore encrypted account backup
+GET    /api/admin/backup              Download encrypted account and user backup
+POST   /api/admin/restore             Restore encrypted account and user backup
 POST   /api/admin/accounts            Add an account
 PATCH  /api/admin/accounts/<id>       Edit, replace key, enable, or disable
 DELETE /api/admin/accounts/<id>       Delete an account
@@ -266,7 +285,7 @@ POST   /api/admin/accounts/<id>/test  Send a minimal request using the selected 
 GET    /healthz                       Public health check
 ```
 
-All pages and APIs except `/healthz`, `/login`, and the login endpoint require a session cookie or Basic Auth. Key-related responses contain masked values only; backup files contain encrypted ciphertext only.
+All pages and APIs except `/healthz`, `/login`, and the login endpoint require a session cookie or Basic Auth. Viewer responses are filtered to assigned accounts, and administrator routes enforce the role on the server. Key-related responses contain masked values only; backup files contain encrypted ciphertext only.
 
 ## Security
 
@@ -274,7 +293,7 @@ All pages and APIs except `/healthz`, `/login`, and the login endpoint require a
 - The image runs as a non-root user. Compose uses a read-only root filesystem, drops Linux capabilities, and prevents privilege escalation.
 - Only `/data` is writable. API keys are not written into the image, browser responses, or application logs.
 - A model test sends a real request and can consume quota or trigger rate limits. It runs only after user confirmation.
-- Restoring a backup replaces the current account list and clears usage cache; verify the backup source and encryption secret first.
+- Restoring a backup replaces the current account and user lists and clears usage cache; verify the backup source and encryption secret first.
 - Worker secrets, `worker-credentials.json`, `.dev.vars`, D1 exports, and Docker `.env` files must never be committed. Logs and responses never expose full keys.
 - The OpenCode Go API may change; production operators must monitor compatibility.
 

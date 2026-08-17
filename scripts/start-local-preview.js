@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { AccountService } from "../src/account-service.js";
 import { createHttpServer } from "../src/http-server.js";
 import { EncryptedKeyStore } from "../src/key-store.js";
+import { EncryptedUserStore } from "../src/user-store.js";
 
 const projectDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const runtimeDir = join(projectDir, ".local-runtime");
@@ -56,12 +57,22 @@ const config = Object.freeze({
 
 const keyStore = new EncryptedKeyStore({ filePath: join(dataDir, "keys.enc.json"), secret: config.keyEncryptionSecret });
 await keyStore.init();
+const userStore = new EncryptedUserStore({
+  filePath: join(dataDir, "users.enc.json"),
+  secret: config.keyEncryptionSecret,
+  reservedUsername: config.webUsername,
+});
+await userStore.init();
 const accountService = new AccountService({ config, keyStore });
 const cleanupTimer = setInterval(() => {
-  accountService.cleanupExpiredAccounts().catch(() => {});
+  accountService.cleanupExpiredAccounts()
+    .then(async (removed) => {
+      for (const account of removed) await userStore.revokeAccount(account.id);
+    })
+    .catch(() => {});
 }, 60_000);
 cleanupTimer.unref();
-const app = createHttpServer({ config, accountService, publicDir: join(projectDir, "public") });
+const app = createHttpServer({ config, accountService, userStore, publicDir: join(projectDir, "public") });
 await new Promise((resolve) => app.listen(0, "127.0.0.1", resolve));
 
 const authorization = `Basic ${Buffer.from(`${config.webUsername}:${config.webPassword}`).toString("base64")}`;

@@ -15,10 +15,11 @@ function signature(payload, secret) {
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }
 
-function tokenFor(username, secret, now = Date.now()) {
-  const expiresAt = Math.floor(now / 1000) + SESSION_MAX_AGE;
-  const payload = `${base64UrlEncode(username)}.${expiresAt}`;
-  return `${payload}.${signature(payload, secret)}`;
+function secureTextEqual(left, right) {
+  if (typeof left !== "string" || typeof right !== "string") return false;
+  const expected = createHmac("sha256", "opencode-go-credential-comparison").update(right).digest();
+  const actual = createHmac("sha256", "opencode-go-credential-comparison").update(left).digest();
+  return timingSafeEqual(actual, expected);
 }
 
 function cookiesFromRequest(request) {
@@ -30,36 +31,51 @@ function cookiesFromRequest(request) {
 }
 
 export function credentialsMatch(username, password, config) {
-  if (typeof username !== "string" || typeof password !== "string" || !config.webUsername || !config.webPassword) return false;
-  const expectedUsername = createHmac("sha256", "comparison").update(config.webUsername).digest();
-  const actualUsername = createHmac("sha256", "comparison").update(username).digest();
-  const expectedPassword = createHmac("sha256", "comparison").update(config.webPassword).digest();
-  const actualPassword = createHmac("sha256", "comparison").update(password).digest();
-  return timingSafeEqual(actualUsername, expectedUsername) && timingSafeEqual(actualPassword, expectedPassword);
+  if (!config.webUsername || !config.webPassword) return false;
+  return secureTextEqual(username, config.webUsername) && secureTextEqual(password, config.webPassword);
 }
 
-export function sessionAuthorized(request, config, now = Date.now()) {
+export function sessionClaims(request, config, now = Date.now()) {
   const token = cookiesFromRequest(request).get(SESSION_COOKIE);
-  if (!token || !config.webPassword) return false;
-  const parts = token.split(".");
-  if (parts.length !== 3) return false;
-  const [encodedUsername, expiresAt, providedSignature] = parts;
-  const payload = `${encodedUsername}.${expiresAt}`;
-  const expectedSignature = signature(payload, config.webPassword);
-  if (providedSignature.length !== expectedSignature.length) return false;
-  if (!timingSafeEqual(Buffer.from(providedSignature), Buffer.from(expectedSignature))) return false;
-  const expires = Number(expiresAt);
-  if (!Number.isSafeInteger(expires) || expires <= Math.floor(now / 1000)) return false;
+  if (!token || !config.webPassword) return null;
+  const separator = token.lastIndexOf(".");
+  if (separator < 1) return null;
+  const encodedPayload = token.slice(0, separator);
+  const providedSignature = token.slice(separator + 1);
+  const expectedSignature = signature(encodedPayload, config.webPassword);
+  if (providedSignature.length !== expectedSignature.length
+    || !timingSafeEqual(Buffer.from(providedSignature), Buffer.from(expectedSignature))) return null;
   try {
-    return base64UrlDecode(encodedUsername) === config.webUsername;
+    const claims = JSON.parse(base64UrlDecode(encodedPayload));
+    if (!claims || claims.version !== 1 || !["admin", "viewer"].includes(claims.role)
+      || typeof claims.subject !== "string" || typeof claims.username !== "string"
+      || !Number.isSafeInteger(claims.expiresAt) || claims.expiresAt <= Math.floor(now / 1000)) return null;
+    return claims;
   } catch {
-    return false;
+    return null;
   }
 }
 
-export function sessionCookie(config, request, now = Date.now()) {
+export function sessionAuthorized(request, config, now = Date.now()) {
+  const claims = sessionClaims(request, config, now);
+  return Boolean(claims?.role === "admin" && claims.username === config.webUsername);
+}
+
+export function sessionCookie(config, request, principal = {
+  subject: "admin",
+  username: config.webUsername,
+  role: "admin",
+}, now = Date.now()) {
+  const claims = {
+    subject: principal.subject,
+    username: principal.username,
+    role: principal.role,
+    version: 1,
+    expiresAt: Math.floor(now / 1000) + SESSION_MAX_AGE,
+  };
+  const encodedPayload = base64UrlEncode(JSON.stringify(claims));
   const secure = request.socket?.encrypted || request.headers["x-forwarded-proto"] === "https";
-  return `${SESSION_COOKIE}=${tokenFor(config.webUsername, config.webPassword, now)}; Max-Age=${SESSION_MAX_AGE}; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
+  return `${SESSION_COOKIE}=${encodedPayload}.${signature(encodedPayload, config.webPassword)}; Max-Age=${SESSION_MAX_AGE}; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
 }
 
 export function clearSessionCookie() {

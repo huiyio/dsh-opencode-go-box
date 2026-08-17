@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light">
     <meta name="theme-color" content="#f4f5f1">
     <title>OpenCode Go Key 管理</title>
-    <link rel="stylesheet" href="/styles.css?v=lifecycle-1">
+    <link rel="stylesheet" href="/styles.css?v=users-1">
   </head>
   <body>
     <div class="app-shell">
@@ -108,6 +108,36 @@
           </div>
           <div id="account-list" class="account-list" aria-live="polite"></div>
         </section>
+
+        <section class="user-management" aria-labelledby="user-list-title">
+          <div class="account-list-heading user-list-heading">
+            <div>
+              <h2 id="user-list-title" data-copy="usersTitle">用户管理</h2>
+              <p data-copy="usersSubtitle">用户只能查看已授权的账号额度，未授权时看不到任何账号数据</p>
+            </div>
+            <span id="user-count" class="account-count">数量：0</span>
+          </div>
+          <form id="user-add-form" class="user-form">
+            <div class="field">
+              <label for="user-username" data-copy="username">用户名</label>
+              <input id="user-username" name="username" minlength="3" maxlength="64" autocomplete="off" required>
+            </div>
+            <div class="field">
+              <label for="user-password" data-copy="password">登录密码</label>
+              <input id="user-password" name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required>
+            </div>
+            <label class="checkbox-field user-enabled-field" for="user-enabled">
+              <input id="user-enabled" name="enabled" type="checkbox" checked>
+              <span data-copy="enabled">启用</span>
+            </label>
+            <fieldset class="permission-fieldset">
+              <legend data-copy="permissions">可查看的账号</legend>
+              <div id="user-permissions" class="permission-grid"></div>
+            </fieldset>
+            <button id="user-add-button" class="command-button" type="submit" data-copy="addUser">添加用户</button>
+          </form>
+          <div id="user-list" class="user-list" aria-live="polite"></div>
+        </section>
       </main>
 
       <footer>
@@ -172,6 +202,35 @@
       </form>
     </dialog>
 
-    <script type="module" src="/admin.js?v=lifecycle-2"></script>
+    <dialog id="user-edit-dialog">
+      <form id="user-edit-form" class="dialog-body">
+        <h2 data-copy="editUser">编辑用户</h2>
+        <p id="user-edit-error" class="dialog-error" role="alert" hidden></p>
+        <div class="dialog-fields">
+          <div class="field">
+            <label for="user-edit-username" data-copy="username">用户名</label>
+            <input id="user-edit-username" name="username" minlength="3" maxlength="64" autocomplete="off" required>
+          </div>
+          <div class="field">
+            <label for="user-edit-password" data-copy="replacementPassword">重置密码（留空则不修改）</label>
+            <input id="user-edit-password" name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password">
+          </div>
+          <label class="checkbox-field" for="user-edit-enabled">
+            <input id="user-edit-enabled" name="enabled" type="checkbox">
+            <span data-copy="enabled">启用</span>
+          </label>
+          <fieldset class="permission-fieldset dialog-permissions">
+            <legend data-copy="permissions">可查看的账号</legend>
+            <div id="user-edit-permissions" class="permission-grid"></div>
+          </fieldset>
+        </div>
+        <div class="dialog-actions">
+          <button id="user-edit-cancel" class="command-button secondary" type="button" data-copy="cancel">取消</button>
+          <button class="command-button" type="submit" data-copy="save">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/admin.js?v=users-1"></script>
   </body>
 </html>

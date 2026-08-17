@@ -54,29 +54,46 @@ export async function credentialsMatch(username, password, env) {
   return equal(actualUsername, expectedUsername) && equal(actualPassword, expectedPassword);
 }
 
-export async function sessionAuthorized(request, env, now = Date.now()) {
+export async function sessionClaims(request, env, now = Date.now()) {
   const token = cookiesFromRequest(request).get(SESSION_COOKIE);
-  if (!token || !env.WEB_PASSWORD) return false;
-  const parts = token.split(".");
-  if (parts.length !== 3) return false;
-  const [encodedUsername, expiresAt, providedSignature] = parts;
-  const payload = `${encodedUsername}.${expiresAt}`;
-  const expectedSignature = await hmac(payload, env.WEB_PASSWORD);
-  if (!(await secureEqual(providedSignature, expectedSignature))) return false;
-  const expires = Number(expiresAt);
-  if (!Number.isSafeInteger(expires) || expires <= Math.floor(now / 1000)) return false;
+  if (!token || !env.WEB_PASSWORD) return null;
+  const separator = token.lastIndexOf(".");
+  if (separator < 1) return null;
+  const encodedPayload = token.slice(0, separator);
+  const providedSignature = token.slice(separator + 1);
+  if (!(await secureEqual(providedSignature, await hmac(encodedPayload, env.WEB_PASSWORD)))) return null;
   try {
-    return base64UrlDecode(encodedUsername) === env.WEB_USERNAME;
+    const claims = JSON.parse(base64UrlDecode(encodedPayload));
+    if (!claims || claims.version !== 1 || !["admin", "viewer"].includes(claims.role)
+      || typeof claims.subject !== "string" || typeof claims.username !== "string"
+      || !Number.isSafeInteger(claims.expiresAt) || claims.expiresAt <= Math.floor(now / 1000)) return null;
+    return claims;
   } catch {
-    return false;
+    return null;
   }
 }
 
-export async function sessionCookie(env, request, now = Date.now()) {
-  const expiresAt = Math.floor(now / 1000) + SESSION_MAX_AGE;
-  const payload = `${base64UrlEncode(env.WEB_USERNAME)}.${expiresAt}`;
+export async function sessionAuthorized(request, env, now = Date.now()) {
+  const claims = await sessionClaims(request, env, now);
+  return Boolean(claims?.role === "admin" && claims.subject === "admin" && claims.username === env.WEB_USERNAME);
+}
+
+export async function sessionCookie(env, request, principal = null, now = Date.now()) {
+  if (typeof principal === "number") {
+    now = principal;
+    principal = null;
+  }
+  const identity = principal || { subject: "admin", username: env.WEB_USERNAME, role: "admin" };
+  const claims = {
+    subject: identity.subject,
+    username: identity.username,
+    role: identity.role,
+    version: 1,
+    expiresAt: Math.floor(now / 1000) + SESSION_MAX_AGE,
+  };
+  const encodedPayload = base64UrlEncode(JSON.stringify(claims));
   const secure = new URL(request.url).protocol === "https:";
-  return `${SESSION_COOKIE}=${payload}.${await hmac(payload, env.WEB_PASSWORD)}; Max-Age=${SESSION_MAX_AGE}; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
+  return `${SESSION_COOKIE}=${encodedPayload}.${await hmac(encodedPayload, env.WEB_PASSWORD)}; Max-Age=${SESSION_MAX_AGE}; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
 }
 
 export function clearSessionCookie() {

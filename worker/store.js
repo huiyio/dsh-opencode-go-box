@@ -242,6 +242,7 @@ export class AccountStore {
     const row = await this.env.DB.prepare("SELECT * FROM accounts WHERE id = ?").bind(id).first();
     if (!row) throw new WorkerError("account_not_found", "Account not found", 404);
     await this.env.DB.batch([
+      this.env.DB.prepare("DELETE FROM user_accounts WHERE account_id = ?").bind(id),
       this.env.DB.prepare("DELETE FROM accounts WHERE id = ?").bind(id),
       this.env.DB.prepare("DELETE FROM usage_cache WHERE account_id = ?").bind(id),
     ]);
@@ -255,6 +256,7 @@ export class AccountStore {
     const ids = result.results.map((row) => row.id);
     if (ids.length === 0) return [];
     await this.env.DB.batch(ids.flatMap((id) => [
+      this.env.DB.prepare("DELETE FROM user_accounts WHERE account_id = ?").bind(id),
       this.env.DB.prepare("DELETE FROM usage_cache WHERE account_id = ?").bind(id),
       this.env.DB.prepare("DELETE FROM accounts WHERE id = ?").bind(id),
     ]));

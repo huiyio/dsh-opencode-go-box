@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { KeyStoreError } from "./key-store.js";
 import { ModelTestError } from "./model-test-service.js";
-import { clearSessionCookie, credentialsMatch, sessionAuthorized, sessionCookie } from "./session.js";
+import { clearSessionCookie, credentialsMatch, sessionClaims, sessionCookie } from "./session.js";
+import { UserStoreError } from "./user-store.js";
 import { UsageError } from "./usage-service.js";
 
 const STATIC_ROUTES = new Map([
@@ -69,12 +70,33 @@ function credentialsFromRequest(request) {
   }
 }
 
-function isAuthorized(request, config) {
-  if (!config.webUsername && !config.webPassword) return true;
-  if (sessionAuthorized(request, config)) return true;
+function adminPrincipal(config) {
+  return { subject: "admin", username: config.webUsername || "admin", role: "admin", accountIds: null };
+}
+
+function viewerPrincipal(user) {
+  return { subject: user.id, username: user.username, role: "viewer", accountIds: [...user.accountIds] };
+}
+
+async function authenticateCredentials(username, password, config, userStore) {
+  if (credentialsMatch(username, password, config)) return adminPrincipal(config);
+  const user = await userStore?.authenticate(username, password);
+  return user ? viewerPrincipal(user) : null;
+}
+
+async function principalFromRequest(request, config, userStore) {
+  if (!config.webUsername && !config.webPassword) return adminPrincipal(config);
+  const claims = sessionClaims(request, config);
+  if (claims?.role === "admin" && claims.subject === "admin" && claims.username === config.webUsername) {
+    return adminPrincipal(config);
+  }
+  if (claims?.role === "viewer") {
+    const user = userStore?.getEnabledById(claims.subject);
+    if (user && user.username === claims.username) return viewerPrincipal(user);
+  }
   const credentials = credentialsFromRequest(request);
-  if (!credentials) return false;
-  return credentialsMatch(credentials.username, credentials.password, config);
+  if (!credentials) return null;
+  return authenticateCredentials(credentials.username, credentials.password, config, userStore);
 }
 
 async function sendStatic(response, publicDir, filename, headOnly) {
@@ -118,7 +140,8 @@ async function readJsonBody(request, maxBytes = 16384) {
 }
 
 function sendError(response, error, logger) {
-  const expected = error instanceof UsageError || error instanceof KeyStoreError || error instanceof ModelTestError || error instanceof HttpError;
+  const expected = error instanceof UsageError || error instanceof KeyStoreError || error instanceof UserStoreError
+    || error instanceof ModelTestError || error instanceof HttpError;
   if (!expected) logger.error("Unexpected request failure", error);
   sendJson(response, expected ? error.status : 500, {
     ok: false,
@@ -129,7 +152,32 @@ function sendError(response, error, logger) {
   });
 }
 
-export function createHttpServer({ config, accountService, publicDir, logger = console }) {
+function accountsForPrincipal(accountService, principal, { includeDisabled = false } = {}) {
+  const accounts = accountService.listAccounts({ includeDisabled });
+  if (principal.role === "admin") return accounts;
+  const allowed = new Set(principal.accountIds);
+  return accounts.filter((account) => allowed.has(account.id));
+}
+
+function validatedAccountIds(value, accountService) {
+  if (!Array.isArray(value) || value.length > 500) {
+    throw new UserStoreError("invalid_permissions", "accountIds must be an array with at most 500 items");
+  }
+  const known = new Set(accountService.listAccounts({ includeDisabled: true }).map((account) => account.id));
+  const ids = [...new Set(value)];
+  if (ids.some((id) => typeof id !== "string" || !known.has(id))) {
+    throw new UserStoreError("invalid_permissions", "One or more account permissions do not exist");
+  }
+  return ids;
+}
+
+function requireAdmin(response, principal) {
+  if (principal.role === "admin") return true;
+  sendJson(response, 403, { ok: false, error: { code: "admin_required", message: "Administrator access is required" } });
+  return false;
+}
+
+export function createHttpServer({ config, accountService, userStore = null, publicDir, logger = console }) {
   const startedAt = Date.now();
 
   return createServer(async (request, response) => {
@@ -162,14 +210,16 @@ export function createHttpServer({ config, accountService, publicDir, logger = c
       }
       try {
         const body = await readJsonBody(request);
-        if (!credentialsMatch(body.username, body.password, config)) {
+        const principal = await authenticateCredentials(body.username, body.password, config, userStore);
+        if (!principal) {
           sendJson(response, 401, { ok: false, error: { code: "invalid_credentials", message: "Invalid username or password" } });
           return;
         }
-        const next = typeof body.next === "string" && body.next.startsWith("/") && !body.next.startsWith("//")
+        const requestedNext = typeof body.next === "string" && body.next.startsWith("/") && !body.next.startsWith("//")
           ? body.next
           : "/";
-        sendJson(response, 200, { ok: true, next }, { "Set-Cookie": sessionCookie(config, request) });
+        const next = principal.role === "admin" || !requestedNext.startsWith("/admin") ? requestedNext : "/";
+        sendJson(response, 200, { ok: true, next }, { "Set-Cookie": sessionCookie(config, request, principal) });
       } catch (error) {
         sendError(response, error, logger);
       }
@@ -185,24 +235,40 @@ export function createHttpServer({ config, accountService, publicDir, logger = c
       return;
     }
 
-    if (typeof accountService.cleanupExpiredAccounts === "function") {
-      try {
-        await accountService.cleanupExpiredAccounts();
-      } catch (error) {
-        sendError(response, error, logger);
-        return;
-      }
-    }
-
     const publicLoginRoute = url.pathname === "/login" || url.pathname === "/login.html"
       || url.pathname === "/login.js" || url.pathname === "/styles.css";
-    if (!publicLoginRoute && !isAuthorized(request, config)) {
+    const principal = publicLoginRoute ? null : await principalFromRequest(request, config, userStore);
+    if (!publicLoginRoute && !principal) {
       if ((url.pathname === "/" || url.pathname === "/admin") && (request.method === "GET" || request.method === "HEAD")) {
         response.writeHead(302, { Location: `/login?next=${encodeURIComponent(`${url.pathname}${url.search}`)}`, ...securityHeaders() });
         response.end();
         return;
       }
       sendJson(response, 401, { ok: false, error: { code: "authentication_required", message: "Authentication required" } });
+      return;
+    }
+
+    if (!publicLoginRoute && (url.pathname === "/admin" || url.pathname === "/admin.html" || url.pathname.startsWith("/api/admin/"))
+      && !requireAdmin(response, principal)) return;
+
+    if (!publicLoginRoute && typeof accountService.cleanupExpiredAccounts === "function") {
+      try {
+        const removed = await accountService.cleanupExpiredAccounts();
+        if (userStore) {
+          for (const account of removed) await userStore.revokeAccount(account.id);
+        }
+      } catch (error) {
+        sendError(response, error, logger);
+        return;
+      }
+    }
+
+    if (url.pathname === "/api/me") {
+      if (request.method !== "GET") {
+        sendJson(response, 405, { ok: false, error: { code: "method_not_allowed", message: "Method not allowed" } }, { Allow: "GET" });
+        return;
+      }
+      sendJson(response, 200, { ok: true, user: { username: principal.username, role: principal.role } });
       return;
     }
 
@@ -213,9 +279,77 @@ export function createHttpServer({ config, accountService, publicDir, logger = c
       }
       sendJson(response, 200, {
         ok: true,
-        accounts: accountService.listAccounts(),
-        adminEnabled: accountService.adminEnabled,
+        accounts: accountsForPrincipal(accountService, principal),
+        adminEnabled: principal.role === "admin" && accountService.adminEnabled,
       });
+      return;
+    }
+
+    if (url.pathname === "/api/usage") {
+      if (request.method !== "GET") {
+        sendJson(response, 405, { ok: false, error: { code: "method_not_allowed", message: "Method not allowed" } }, { Allow: "GET" });
+        return;
+      }
+      try {
+        const allowedAccounts = accountsForPrincipal(accountService, principal);
+        const requestedId = url.searchParams.get("account");
+        const selected = requestedId
+          ? allowedAccounts.find((account) => account.id === requestedId)
+          : allowedAccounts[0];
+        if (!selected) {
+          throw new UsageError(requestedId ? "account_not_found" : "no_accounts", requestedId ? "Account not found" : "No accounts are assigned", 404);
+        }
+        const result = await accountService.getUsage(selected.id, { force: url.searchParams.get("refresh") === "1" });
+        sendJson(response, 200, {
+          ok: true,
+          ...result,
+          thresholds: { warn: config.warnPercent, danger: config.dangerPercent },
+          refreshIntervalMs: config.refreshIntervalMs,
+        });
+      } catch (error) {
+        sendError(response, error, logger);
+      }
+      return;
+    }
+
+    if (url.pathname === "/api/admin/users" || url.pathname.startsWith("/api/admin/users/")) {
+      if (!userStore?.writable) {
+        sendJson(response, 503, { ok: false, error: { code: "user_store_disabled", message: "User management is disabled" } });
+        return;
+      }
+      try {
+        const id = url.pathname.startsWith("/api/admin/users/")
+          ? decodeURIComponent(url.pathname.slice("/api/admin/users/".length))
+          : "";
+        if (!id && request.method === "GET") {
+          sendJson(response, 200, { ok: true, users: userStore.list() });
+          return;
+        }
+        if (!id && request.method === "POST") {
+          const body = await readJsonBody(request);
+          const user = await userStore.add({ ...body, accountIds: validatedAccountIds(body.accountIds || [], accountService) });
+          sendJson(response, 201, { ok: true, user });
+          return;
+        }
+        if (id && request.method === "PATCH") {
+          const body = await readJsonBody(request);
+          const changes = { ...body };
+          if (Object.hasOwn(body, "accountIds")) changes.accountIds = validatedAccountIds(body.accountIds, accountService);
+          const user = await userStore.update(id, changes);
+          sendJson(response, 200, { ok: true, user });
+          return;
+        }
+        if (id && request.method === "DELETE") {
+          const user = await userStore.remove(id);
+          sendJson(response, 200, { ok: true, user });
+          return;
+        }
+        sendJson(response, 405, { ok: false, error: { code: "method_not_allowed", message: "Method not allowed" } }, {
+          Allow: id ? "PATCH, DELETE" : "GET, POST",
+        });
+      } catch (error) {
+        sendError(response, error, logger);
+      }
       return;
     }
 
@@ -236,27 +370,6 @@ export function createHttpServer({ config, accountService, publicDir, logger = c
       return;
     }
 
-    if (url.pathname === "/api/usage") {
-      if (request.method !== "GET") {
-        sendJson(response, 405, { ok: false, error: { code: "method_not_allowed", message: "Method not allowed" } }, { Allow: "GET" });
-        return;
-      }
-      try {
-        const result = await accountService.getUsage(url.searchParams.get("account"), {
-          force: url.searchParams.get("refresh") === "1",
-        });
-        sendJson(response, 200, {
-          ok: true,
-          ...result,
-          thresholds: { warn: config.warnPercent, danger: config.dangerPercent },
-          refreshIntervalMs: config.refreshIntervalMs,
-        });
-      } catch (error) {
-        sendError(response, error, logger);
-      }
-      return;
-    }
-
     if (url.pathname === "/api/admin/backup" || url.pathname === "/api/admin/restore") {
       if (!accountService.adminEnabled) {
         sendJson(response, 503, { ok: false, error: { code: "admin_disabled", message: "Account management is disabled" } });
@@ -264,14 +377,30 @@ export function createHttpServer({ config, accountService, publicDir, logger = c
       }
       try {
         if (url.pathname === "/api/admin/backup" && request.method === "GET") {
-          sendJson(response, 200, { ok: true, backup: await accountService.exportBackup() }, {
+          const accountBackup = await accountService.exportBackup();
+          const backup = userStore?.writable
+            ? { format: "opencode-go-full-backup-v2", platform: "docker", exportedAt: new Date().toISOString(), accountBackup, userBackup: await userStore.exportBackup() }
+            : accountBackup;
+          sendJson(response, 200, { ok: true, backup }, {
             "Content-Disposition": 'attachment; filename="opencode-go-balance-backup.json"',
           });
           return;
         }
         if (url.pathname === "/api/admin/restore" && request.method === "POST") {
           const body = await readJsonBody(request, 8 * 1024 * 1024);
-          const result = await accountService.restoreBackup(body.backup || body);
+          const backup = body.backup || body;
+          let result;
+          if (backup?.format === "opencode-go-full-backup-v2" && backup.platform === "docker") {
+            result = await accountService.restoreBackup(backup.accountBackup);
+            const userResult = await userStore.restoreBackup(backup.userBackup);
+            await userStore.retainAccounts(accountService.listAccounts({ includeDisabled: true }).map((account) => account.id));
+            result = { ...result, ...userResult };
+          } else {
+            result = await accountService.restoreBackup(backup);
+            if (userStore?.writable) {
+              await userStore.retainAccounts(accountService.listAccounts({ includeDisabled: true }).map((account) => account.id));
+            }
+          }
           sendJson(response, 200, { ok: true, ...result });
           return;
         }
@@ -310,11 +439,7 @@ export function createHttpServer({ config, accountService, publicDir, logger = c
         if (id && action === "test" && request.method === "POST") {
           const body = await readJsonBody(request);
           const result = await accountService.testModel(id, body.model);
-          sendJson(response, 200, {
-            ok: true,
-            valid: true,
-            modelTest: result,
-          });
+          sendJson(response, 200, { ok: true, valid: true, modelTest: result });
           return;
         }
         if (id && !action && request.method === "PATCH") {
@@ -324,6 +449,7 @@ export function createHttpServer({ config, accountService, publicDir, logger = c
         }
         if (id && !action && request.method === "DELETE") {
           const account = await accountService.removeAccount(id);
+          if (userStore) await userStore.revokeAccount(id);
           sendJson(response, 200, { ok: true, account });
           return;
         }
