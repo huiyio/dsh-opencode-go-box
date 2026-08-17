@@ -4,137 +4,51 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
-    <meta name="theme-color" content="#f3f6fa">
+    <meta name="theme-color" content="#f4f6f5">
     <title>OpenCode Go 额度</title>
-    <link rel="stylesheet" href="/styles.css?v=console-3">
+    <link rel="stylesheet" href="/styles.css?v=console-4">
   </head>
-  <body>
-    <div class="app-shell">
-      <header class="topbar">
+  <body data-page="dashboard">
+    <div class="console-shell">
+      <aside class="console-sidebar" aria-label="主导航">
         <a class="brand" href="/" aria-label="OpenCode Go">
           <span class="brand-mark" aria-hidden="true">GO</span>
-          <span class="brand-name">OpenCode Go</span>
+          <span class="brand-copy"><strong>OpenCode Go</strong><small>额度工作台</small></span>
         </a>
-        <div class="toolbar">
-          <div class="language-switch" role="group" aria-label="Language">
-            <button type="button" data-locale="zh" aria-pressed="true">中文</button>
-            <button type="button" data-locale="en" aria-pressed="false">EN</button>
+        <nav class="primary-nav">
+          <a href="/" data-nav="dashboard"><span>额度看板</span><small>账号用量</small></a>
+          <a id="admin-link" href="/admin" data-nav="keys" data-admin-link hidden><span data-copy="manageKeys">Key 管理</span><small>账号与额度</small></a>
+          <a href="/users" data-nav="users" data-admin-link hidden><span>用户与权限</span><small>访问控制</small></a>
+          <a href="/profile" data-nav="profile"><span data-copy="profile">个人设置</span><small>账号安全</small></a>
+        </nav>
+        <div class="sidebar-note"><span class="sidebar-note-label">数据服务</span><strong>OpenCode Go</strong><span>受登录权限保护</span></div>
+      </aside>
+      <div class="console-content">
+        <header class="global-bar">
+          <a class="mobile-brand" href="/" aria-label="OpenCode Go"><span class="brand-mark" aria-hidden="true">GO</span><span>OpenCode Go</span></a>
+          <div class="global-actions">
+            <div class="language-switch" role="group" aria-label="Language"><button type="button" data-locale="zh" aria-pressed="true">中文</button><button type="button" data-locale="en" aria-pressed="false">EN</button></div>
+            <a id="profile-link" class="text-command" href="/profile" title="个人设置" aria-label="个人设置"><span data-copy="profile">个人设置</span></a>
+            <button id="logout-button" class="text-command" type="button" title="退出登录" aria-label="退出登录"><span data-copy="logout">退出登录</span></button>
           </div>
-          <button id="logout-button" class="command-button header-command" type="button" title="退出登录" aria-label="退出登录">
-            <span data-copy="logout">退出登录</span>
-          </button>
-          <a id="profile-link" class="command-button secondary header-command" href="/profile" title="个人设置" aria-label="个人设置">
-            <span data-copy="profile">个人设置</span>
-          </a>
-          <a id="admin-link" class="command-button secondary header-command" href="/admin?v=users-1" title="Key 管理" aria-label="Key 管理" hidden>
-            <span data-copy="manageKeys">Key 管理</span>
-          </a>
-          <button id="refresh-button" class="command-button secondary header-command" type="button" title="刷新" aria-label="刷新">
-            <span data-copy="refresh">刷新</span>
-          </button>
-        </div>
-      </header>
-
-      <main>
-        <section class="overview" aria-labelledby="page-title">
-          <div>
-            <p class="eyebrow" data-copy="eyebrow">实时额度</p>
-            <h1 id="page-title" data-copy="title">使用情况</h1>
-          </div>
-          <div class="sync-state" aria-live="polite">
-            <span id="status-dot" class="status-dot is-loading" aria-hidden="true"></span>
-            <div>
-              <strong id="status-label" data-copy="loading">正在读取</strong>
-              <span id="updated-at">--</span>
-            </div>
-          </div>
-        </section>
-
-        <section class="account-bar" aria-label="Account">
-          <label for="account-select" data-copy="account">账号</label>
-          <select id="account-select" disabled></select>
-          <span id="account-key">--</span>
-        </section>
-
-        <section id="error-banner" class="error-banner" role="alert" hidden>
-          <strong id="error-title"></strong>
-          <span id="error-message"></span>
-        </section>
-
-        <section class="quota-grid" aria-label="Quota windows">
-          <article class="quota-card" data-window="rolling">
-            <div class="card-heading">
-              <div>
-                <p class="window-kicker" data-copy="rollingPeriod">5小时</p>
-                <h2 data-copy="rolling">5 小时滚动</h2>
-              </div>
-              <span class="window-status" data-role="window-status">--</span>
-            </div>
-            <div class="balance-line">
-              <strong data-role="remaining">--</strong>
-              <span data-copy="remaining">剩余</span>
-            </div>
-            <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-              <span data-role="progress"></span>
-            </div>
-            <div class="card-meta">
-              <span><span data-copy="used">已使用</span> <b data-role="used">--</b></span>
-              <span><span data-copy="reset">重置</span> <b data-role="countdown">--</b></span>
-            </div>
-            <time data-role="reset-at">--</time>
-          </article>
-
-          <article class="quota-card" data-window="weekly">
-            <div class="card-heading">
-              <div>
-                <p class="window-kicker" data-copy="weeklyPeriod">7天</p>
-                <h2 data-copy="weekly">每周</h2>
-              </div>
-              <span class="window-status" data-role="window-status">--</span>
-            </div>
-            <div class="balance-line">
-              <strong data-role="remaining">--</strong>
-              <span data-copy="remaining">剩余</span>
-            </div>
-            <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-              <span data-role="progress"></span>
-            </div>
-            <div class="card-meta">
-              <span><span data-copy="used">已使用</span> <b data-role="used">--</b></span>
-              <span><span data-copy="reset">重置</span> <b data-role="countdown">--</b></span>
-            </div>
-            <time data-role="reset-at">--</time>
-          </article>
-
-          <article class="quota-card" data-window="monthly">
-            <div class="card-heading">
-              <div>
-                <p class="window-kicker" data-copy="monthlyPeriod">30天</p>
-                <h2 data-copy="monthly">每月</h2>
-              </div>
-              <span class="window-status" data-role="window-status">--</span>
-            </div>
-            <div class="balance-line">
-              <strong data-role="remaining">--</strong>
-              <span data-copy="remaining">剩余</span>
-            </div>
-            <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-              <span data-role="progress"></span>
-            </div>
-            <div class="card-meta">
-              <span><span data-copy="used">已使用</span> <b data-role="used">--</b></span>
-              <span><span data-copy="reset">重置</span> <b data-role="countdown">--</b></span>
-            </div>
-            <time data-role="reset-at">--</time>
-          </article>
-        </section>
-      </main>
-
-      <footer>
-        <span>OpenCode Go</span>
-        <span id="cache-label"></span>
-      </footer>
+        </header>
+        <nav class="compact-nav" aria-label="主导航"><a href="/" data-nav="dashboard">额度看板</a><a href="/admin" data-nav="keys" data-admin-link hidden>Key 管理</a><a href="/users" data-nav="users" data-admin-link hidden>用户与权限</a><a href="/profile" data-nav="profile">个人设置</a></nav>
+        <main class="workspace dashboard-workspace">
+          <section class="page-header dashboard-header" aria-labelledby="page-title">
+            <div><p class="eyebrow" data-copy="eyebrow">实时额度</p><h1 id="page-title" data-copy="title">使用情况</h1><p class="page-description">按账号查看 OpenCode Go 的当前额度和重置时间。</p></div>
+            <div class="sync-state" aria-live="polite"><span id="status-dot" class="status-dot is-loading" aria-hidden="true"></span><div><strong id="status-label" data-copy="loading">正在读取</strong><span id="updated-at">--</span></div></div>
+          </section>
+          <section class="account-context" aria-label="账号选择"><div class="context-label"><span>当前查看</span><strong data-copy="account">账号</strong></div><label class="sr-only" for="account-select" data-copy="account">账号</label><select id="account-select" disabled></select><code id="account-key">--</code><button id="refresh-button" class="command-button secondary" type="button" title="刷新" aria-label="刷新"><span data-copy="refresh">刷新</span></button></section>
+          <section id="error-banner" class="error-banner" role="alert" hidden><strong id="error-title"></strong><span id="error-message"></span></section>
+          <section class="quota-grid" aria-label="额度周期">
+            <article class="quota-card" data-window="rolling"><div class="card-heading"><div><p class="window-kicker" data-copy="rollingPeriod">5小时</p><h2 data-copy="rolling">5 小时滚动</h2></div><span class="window-status" data-role="window-status">--</span></div><div class="balance-line"><strong data-role="remaining">--</strong><span data-copy="remaining">剩余</span></div><div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span data-role="progress"></span></div><div class="card-meta"><span><span data-copy="used">已使用</span><b data-role="used">--</b></span><span><span data-copy="reset">重置</span><b data-role="countdown">--</b></span></div><time data-role="reset-at">--</time></article>
+            <article class="quota-card" data-window="weekly"><div class="card-heading"><div><p class="window-kicker" data-copy="weeklyPeriod">7天</p><h2 data-copy="weekly">每周</h2></div><span class="window-status" data-role="window-status">--</span></div><div class="balance-line"><strong data-role="remaining">--</strong><span data-copy="remaining">剩余</span></div><div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span data-role="progress"></span></div><div class="card-meta"><span><span data-copy="used">已使用</span><b data-role="used">--</b></span><span><span data-copy="reset">重置</span><b data-role="countdown">--</b></span></div><time data-role="reset-at">--</time></article>
+            <article class="quota-card" data-window="monthly"><div class="card-heading"><div><p class="window-kicker" data-copy="monthlyPeriod">30天</p><h2 data-copy="monthly">每月</h2></div><span class="window-status" data-role="window-status">--</span></div><div class="balance-line"><strong data-role="remaining">--</strong><span data-copy="remaining">剩余</span></div><div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span data-role="progress"></span></div><div class="card-meta"><span><span data-copy="used">已使用</span><b data-role="used">--</b></span><span><span data-copy="reset">重置</span><b data-role="countdown">--</b></span></div><time data-role="reset-at">--</time></article>
+          </section>
+        </main>
+        <footer><span>OpenCode Go 额度工作台</span><span id="cache-label"></span></footer>
+      </div>
     </div>
-    <script type="module" src="/app.js?v=users-1"></script>
+    <script type="module" src="/app.js?v=console-4"></script>
   </body>
 </html>

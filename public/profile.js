@@ -30,6 +30,7 @@ const confirmPassword = document.querySelector("#confirm-password");
 const saveButton = document.querySelector("#profile-save");
 const identitySummary = document.querySelector("#identity-summary");
 const usersLink = document.querySelector("#users-link");
+const adminLinks = document.querySelectorAll("[data-admin-link]");
 const message = document.querySelector("#profile-message");
 const messageTitle = document.querySelector("#profile-message-title");
 const messageText = document.querySelector("#profile-message-text");
@@ -45,7 +46,9 @@ function renderIdentity() {
   identitySummary.textContent = t("identity").replace("{username}", identity.username).replace("{role}", role);
   usernameInput.value = identity.username;
   editor.hidden = !identity.canEditProfile;
-  usersLink.hidden = identity.role !== "admin";
+  const isAdmin = identity.role === "admin";
+  usersLink.hidden = !isAdmin;
+  adminLinks.forEach((link) => { link.hidden = !isAdmin; });
 }
 
 function setLocale(next) {

@@ -164,7 +164,11 @@ function renderUsers() {
     const permissions = document.createElement("div");
     permissions.className = "user-permission-summary";
     const assigned = user.accountIds.map((id) => accountById.get(id)?.label).filter(Boolean);
-    permissions.textContent = assigned.length ? assigned.join("、") : t("noPermissions");
+    const visibleAssigned = assigned.slice(0, 2);
+    permissions.textContent = assigned.length
+      ? `${visibleAssigned.join("、")}${assigned.length > visibleAssigned.length ? ` 等 ${assigned.length} 个` : ""}`
+      : t("noPermissions");
+    permissions.title = assigned.join("、");
     const actions = document.createElement("div");
     actions.className = "user-actions";
     actions.append(

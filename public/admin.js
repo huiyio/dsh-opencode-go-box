@@ -552,27 +552,34 @@ function renderAccounts() {
       details.append(autoDelete);
     }
 
-    const actions = document.createElement("div");
-    actions.className = "account-actions";
-    actions.setAttribute("aria-live", "polite");
+    const testPanel = document.createElement("div");
+    testPanel.className = "account-test";
+    testPanel.setAttribute("aria-live", "polite");
     const testResult = testResults.get(account.id);
     const testButton = actionButton(
       testingAccounts.has(account.id)
         ? t("testingKey")
-        : testResult === "passed"
-          ? t("testPassed")
-          : testResult === "depleted"
-            ? t("testDepleted")
-          : testResult === "invalid"
-            ? t("testInvalid")
-          : testResult === "failed"
-            ? t("testFailed")
-            : t("testKey"),
-      `secondary test-button${testResult ? ` is-${testResult}` : ""}`,
+        : t("testKey"),
+      "secondary test-button",
       () => openTestDialog(account),
     );
     testButton.disabled = busy || lifecycleState !== "active" || testingAccounts.has(account.id);
-    actions.append(testButton);
+    testPanel.append(testButton);
+    if (testResult) {
+      const result = document.createElement("span");
+      result.className = `test-status is-${testResult}`;
+      result.textContent = testResult === "passed"
+        ? t("testPassed")
+        : testResult === "depleted"
+          ? t("testDepleted")
+          : testResult === "invalid"
+            ? t("testInvalid")
+            : t("testFailed");
+      testPanel.append(result);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "account-actions";
     if (account.editable) {
       actions.append(
         actionButton(t("edit"), "secondary", () => openEdit(account)),
@@ -580,7 +587,7 @@ function renderAccounts() {
         actionButton(t("remove"), "danger", () => removeAccount(account)),
       );
     }
-    row.append(identity, quotaSummary(account), details, actions);
+    row.append(identity, details, quotaSummary(account), testPanel, actions);
     accountList.append(row);
   }
 }

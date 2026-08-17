@@ -4,112 +4,21 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
-    <meta name="theme-color" content="#f3f6fa">
+    <meta name="theme-color" content="#f4f6f5">
     <title>OpenCode Go 用户管理</title>
-    <link rel="stylesheet" href="/styles.css?v=console-3">
+    <link rel="stylesheet" href="/styles.css?v=console-4">
   </head>
-  <body>
-    <div class="app-shell">
-      <header class="topbar">
-        <a class="brand" href="/" aria-label="OpenCode Go">
-          <span class="brand-mark" aria-hidden="true">GO</span>
-          <span class="brand-name">OpenCode Go</span>
-        </a>
-        <div class="toolbar">
-          <div class="language-switch" role="group" aria-label="Language">
-            <button type="button" data-locale="zh" aria-pressed="true">中文</button>
-            <button type="button" data-locale="en" aria-pressed="false">EN</button>
-          </div>
-          <button id="logout-button" class="command-button header-command" type="button" data-copy="logout">退出登录</button>
-          <a class="command-button secondary header-command" href="/admin" data-copy="keys">Key 管理</a>
-          <a class="command-button secondary header-command" href="/" data-copy="dashboard">返回看板</a>
-        </div>
-      </header>
-
-      <main class="admin-main">
-        <section class="admin-heading">
-          <div>
-            <p class="eyebrow" data-copy="eyebrow">访问控制</p>
-            <h1 data-copy="title">用户与权限</h1>
-            <p data-copy="subtitle">管理登录账号和可查看的 Key</p>
-          </div>
-        </section>
-
-        <section id="users-error" class="error-banner" role="alert" hidden>
-          <strong data-copy="errorTitle">操作失败</strong>
-          <span id="users-error-message"></span>
-        </section>
-
-        <section class="form-panel" aria-labelledby="add-user-title">
-          <h2 id="add-user-title" data-copy="addTitle">添加用户</h2>
-          <form id="user-add-form" class="user-form standalone-user-form">
-            <div class="field">
-              <label for="user-username" data-copy="username">用户名</label>
-              <input id="user-username" name="username" minlength="3" maxlength="64" autocomplete="off" required>
-            </div>
-            <div class="field">
-              <label for="user-password" data-copy="password">登录密码</label>
-              <input id="user-password" name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required>
-            </div>
-            <label class="checkbox-field user-enabled-field" for="user-enabled">
-              <input id="user-enabled" name="enabled" type="checkbox" checked>
-              <span data-copy="enabled">启用</span>
-            </label>
-            <fieldset class="permission-fieldset">
-              <legend data-copy="permissions">可查看的账号</legend>
-              <div id="user-permissions" class="permission-grid"></div>
-            </fieldset>
-            <button id="user-add-button" class="command-button" type="submit" data-copy="addUser">添加用户</button>
-          </form>
-        </section>
-
-        <section aria-labelledby="user-list-title">
-          <div class="account-list-heading user-list-heading">
-            <div>
-              <h2 id="user-list-title" data-copy="listTitle">用户列表</h2>
-              <p data-copy="listSubtitle">未授权的用户看不到任何账号额度</p>
-            </div>
-            <span id="user-count" class="account-count">数量：0</span>
-          </div>
-          <div id="user-list" class="user-list" aria-live="polite"></div>
-        </section>
-      </main>
-
-      <footer>
-        <span>OpenCode Go</span>
-        <span data-copy="encrypted">加密保存用户凭据</span>
-      </footer>
+  <body data-page="users">
+    <div class="console-shell">
+      <aside class="console-sidebar" aria-label="主导航"><a class="brand" href="/" aria-label="OpenCode Go"><span class="brand-mark" aria-hidden="true">GO</span><span class="brand-copy"><strong>OpenCode Go</strong><small>额度工作台</small></span></a><nav class="primary-nav"><a href="/" data-nav="dashboard"><span>额度看板</span><small>账号用量</small></a><a href="/admin" data-nav="keys"><span>Key 管理</span><small>账号与额度</small></a><a href="/users" data-nav="users"><span>用户与权限</span><small>访问控制</small></a><a href="/profile" data-nav="profile"><span>个人设置</span><small>账号安全</small></a></nav><div class="sidebar-note"><span class="sidebar-note-label">管理范围</span><strong>账号与权限</strong><span>按用户分配查看范围</span></div></aside>
+      <div class="console-content">
+        <header class="global-bar"><a class="mobile-brand" href="/" aria-label="OpenCode Go"><span class="brand-mark" aria-hidden="true">GO</span><span>OpenCode Go</span></a><div class="global-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-locale="zh" aria-pressed="true">中文</button><button type="button" data-locale="en" aria-pressed="false">EN</button></div><a class="text-command" href="/profile">个人设置</a><button id="logout-button" class="text-command" type="button" data-copy="logout">退出登录</button></div></header>
+        <nav class="compact-nav" aria-label="主导航"><a href="/" data-nav="dashboard">额度看板</a><a href="/admin" data-nav="keys">Key 管理</a><a href="/users" data-nav="users">用户与权限</a><a href="/profile" data-nav="profile">个人设置</a></nav>
+        <main class="workspace users-workspace"><section class="page-header" aria-labelledby="users-page-title"><div><p class="eyebrow" data-copy="eyebrow">访问控制</p><h1 id="users-page-title" data-copy="title">用户与权限</h1><p class="page-description" data-copy="subtitle">管理登录账号和可查看的 Key</p></div><span id="user-count" class="count-badge">数量：0</span></section><section id="users-error" class="error-banner" role="alert" hidden><strong data-copy="errorTitle">操作失败</strong><span id="users-error-message"></span></section><details class="entry-panel"><summary><span class="entry-summary-title" data-copy="addTitle">添加用户</span><span class="entry-summary-help">创建登录账号并分配可查看的 Key</span></summary><div class="entry-panel-body"><form id="user-add-form" class="user-form"><div class="user-primary-fields"><div class="field"><label for="user-username" data-copy="username">用户名</label><input id="user-username" name="username" minlength="3" maxlength="64" autocomplete="off" required></div><div class="field"><label for="user-password" data-copy="password">登录密码</label><input id="user-password" name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required></div><label class="checkbox-field user-enabled-field" for="user-enabled"><input id="user-enabled" name="enabled" type="checkbox" checked><span data-copy="enabled">启用</span></label></div><fieldset class="permission-fieldset"><legend data-copy="permissions">可查看的账号</legend><div id="user-permissions" class="permission-grid"></div></fieldset><div class="entry-submit"><button id="user-add-button" class="command-button" type="submit" data-copy="addUser">添加用户</button></div></form></div></details><section class="data-region user-region" aria-labelledby="user-list-title"><header class="data-region-header"><div><p class="section-kicker">已有登录账号</p><h2 id="user-list-title" data-copy="listTitle">用户列表</h2></div><span data-copy="listSubtitle">未授权的用户看不到任何账号额度</span></header><div class="user-table-header" aria-hidden="true"><span>用户</span><span>可查看账号</span><span>操作</span></div><div id="user-list" class="user-list"></div></section></main>
+        <footer><span>OpenCode Go 额度工作台</span><span data-copy="encrypted">加密保存用户凭据</span></footer>
+      </div>
     </div>
-
-    <dialog id="user-edit-dialog">
-      <form id="user-edit-form" class="dialog-body">
-        <h2 data-copy="editUser">修改用户账号</h2>
-        <p id="user-edit-error" class="dialog-error" role="alert" hidden></p>
-        <div class="dialog-fields">
-          <div class="field">
-            <label for="user-edit-username" data-copy="username">用户名</label>
-            <input id="user-edit-username" name="username" minlength="3" maxlength="64" autocomplete="off" required>
-          </div>
-          <div class="field">
-            <label for="user-edit-password" data-copy="replacementPassword">新密码（留空则不修改）</label>
-            <input id="user-edit-password" name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password">
-          </div>
-          <label class="checkbox-field" for="user-edit-enabled">
-            <input id="user-edit-enabled" name="enabled" type="checkbox">
-            <span data-copy="enabled">启用</span>
-          </label>
-          <fieldset class="permission-fieldset dialog-permissions">
-            <legend data-copy="permissions">可查看的账号</legend>
-            <div id="user-edit-permissions" class="permission-grid"></div>
-          </fieldset>
-        </div>
-        <div class="dialog-actions">
-          <button id="user-edit-cancel" class="command-button secondary" type="button" data-copy="cancel">取消</button>
-          <button class="command-button" type="submit" data-copy="save">保存修改</button>
-        </div>
-      </form>
-    </dialog>
-
-    <script type="module" src="/users.js?v=users-2"></script>
+    <dialog id="user-edit-dialog"><form id="user-edit-form" class="dialog-body"><div class="dialog-heading"><p class="eyebrow">访问控制</p><h2 data-copy="editUser">修改用户账号</h2></div><p id="user-edit-error" class="dialog-error" role="alert" hidden></p><div class="dialog-fields"><div class="field"><label for="user-edit-username" data-copy="username">用户名</label><input id="user-edit-username" name="username" minlength="3" maxlength="64" autocomplete="off" required></div><div class="field"><label for="user-edit-password" data-copy="replacementPassword">新密码（留空则不修改）</label><input id="user-edit-password" name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password"></div><label class="checkbox-field" for="user-edit-enabled"><input id="user-edit-enabled" name="enabled" type="checkbox"><span data-copy="enabled">启用</span></label><fieldset class="permission-fieldset dialog-permissions"><legend data-copy="permissions">可查看的账号</legend><div id="user-edit-permissions" class="permission-grid"></div></fieldset></div><div class="dialog-actions"><button id="user-edit-cancel" class="command-button secondary" type="button" data-copy="cancel">取消</button><button class="command-button" type="submit" data-copy="save">保存修改</button></div></form></dialog>
+    <script type="module" src="/users.js?v=console-4"></script>
   </body>
 </html>

@@ -83,6 +83,7 @@ const cacheLabel = document.querySelector("#cache-label");
 const accountSelect = document.querySelector("#account-select");
 const accountKey = document.querySelector("#account-key");
 const adminLink = document.querySelector("#admin-link");
+const adminLinks = document.querySelectorAll("[data-admin-link]");
 const logoutButton = document.querySelector("#logout-button");
 
 function storedLocale() {
@@ -310,9 +311,10 @@ async function loadIdentity() {
   try {
     const response = await fetch("/api/me", { headers: { Accept: "application/json" }, cache: "no-store" });
     const payload = await response.json().catch(() => null);
-    adminLink.hidden = !response.ok || payload?.user?.role !== "admin";
+    const isAdmin = response.ok && payload?.user?.role === "admin";
+    adminLinks.forEach((link) => { link.hidden = !isAdmin; });
   } catch {
-    adminLink.hidden = true;
+    adminLinks.forEach((link) => { link.hidden = true; });
   }
 }
 
