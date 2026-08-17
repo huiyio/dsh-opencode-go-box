@@ -246,17 +246,30 @@ test("HTTP server downloads and restores an authenticated backup", async (contex
   assert.deepEqual(calls, ["backup", ["restore", { format: "test-backup", accounts: [] }]]);
 });
 
-test("viewer sessions only expose assigned accounts and cannot access administrator routes", async (context) => {
-  const viewer = { id: "user-1", username: "customer", enabled: true, accountIds: ["account-1"] };
+test("viewer sessions only expose assigned accounts and can securely update their own credentials", async (context) => {
+  const viewer = { id: "user-1", username: "customer", enabled: true, accountIds: ["account-1"], authVersion: 1 };
+  let viewerPassword = "viewer-password";
   const userStore = {
     writable: true,
     async authenticate(username, password) {
-      return username === viewer.username && password === "viewer-password" && viewer.enabled ? { ...viewer } : null;
+      return username === viewer.username && password === viewerPassword && viewer.enabled ? { ...viewer } : null;
     },
     getEnabledById(id) {
       return id === viewer.id && viewer.enabled ? { ...viewer } : null;
     },
     list() { return [{ ...viewer }]; },
+    async update(id, changes) {
+      assert.equal(id, viewer.id);
+      if (Object.hasOwn(changes, "username") && changes.username !== viewer.username) {
+        viewer.username = changes.username;
+        viewer.authVersion += 1;
+      }
+      if (Object.hasOwn(changes, "password") && changes.password) {
+        viewerPassword = changes.password;
+        viewer.authVersion += 1;
+      }
+      return { ...viewer };
+    },
     async revokeAccount() {},
   };
   const usageCalls = [];
@@ -296,19 +309,44 @@ test("viewer sessions only expose assigned accounts and cannot access administra
   const headers = { Cookie: cookie };
 
   const identity = await fetch(`${baseUrl}/api/me`, { headers });
-  assert.deepEqual((await identity.json()).user, { username: "customer", role: "viewer" });
+  assert.deepEqual((await identity.json()).user, {
+    username: "customer",
+    role: "viewer",
+    canEditProfile: true,
+    credentialSource: "user_store",
+  });
   const visible = await fetch(`${baseUrl}/api/accounts`, { headers });
   assert.deepEqual((await visible.json()).accounts.map((account) => account.id), ["account-1"]);
   assert.equal((await fetch(`${baseUrl}/api/usage?account=account-1`, { headers })).status, 200);
   assert.equal((await fetch(`${baseUrl}/api/usage?account=account-2`, { headers })).status, 404);
   assert.deepEqual(usageCalls, ["account-1"]);
   assert.equal((await fetch(`${baseUrl}/admin`, { headers })).status, 403);
+  assert.equal((await fetch(`${baseUrl}/users`, { headers })).status, 403);
   assert.equal((await fetch(`${baseUrl}/api/admin/accounts`, { headers })).status, 403);
 
-  viewer.accountIds = [];
-  const empty = await fetch(`${baseUrl}/api/accounts`, { headers });
-  assert.deepEqual((await empty.json()).accounts, []);
-  assert.equal((await fetch(`${baseUrl}/api/usage`, { headers })).status, 404);
-  viewer.enabled = false;
+  const wrongCurrent = await fetch(`${baseUrl}/api/me`, {
+    method: "PATCH",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ currentPassword: "wrong-password", username: "customer-new" }),
+  });
+  assert.equal(wrongCurrent.status, 401);
+
+  const updatedProfile = await fetch(`${baseUrl}/api/me`, {
+    method: "PATCH",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ currentPassword: "viewer-password", username: "customer-new", password: "new-viewer-password" }),
+  });
+  assert.equal(updatedProfile.status, 200);
+  assert.equal((await updatedProfile.clone().json()).user.username, "customer-new");
+  const updatedCookie = updatedProfile.headers.get("set-cookie").split(";", 1)[0];
   assert.equal((await fetch(`${baseUrl}/api/accounts`, { headers })).status, 401);
+  const updatedHeaders = { Cookie: updatedCookie };
+  assert.equal((await fetch(`${baseUrl}/api/accounts`, { headers: updatedHeaders })).status, 200);
+
+  viewer.accountIds = [];
+  const empty = await fetch(`${baseUrl}/api/accounts`, { headers: updatedHeaders });
+  assert.deepEqual((await empty.json()).accounts, []);
+  assert.equal((await fetch(`${baseUrl}/api/usage`, { headers: updatedHeaders })).status, 404);
+  viewer.enabled = false;
+  assert.equal((await fetch(`${baseUrl}/api/accounts`, { headers: updatedHeaders })).status, 401);
 });

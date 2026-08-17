@@ -40,13 +40,16 @@ OpenCode Go `/zen/go/v1/usage` 接口返回的是用量百分比，不是货币�
 
 ## 用户与权限
 
-环境变量 `WEB_USERNAME` / `WEB_PASSWORD` 始终是系统管理员，拥有 Key、用户、测试和备份的全部权限。管理员可在 `/admin` 的“用户管理”区域创建普通查看用户，并为每个用户勾选可查询账号。
+环境变量 `WEB_USERNAME` / `WEB_PASSWORD` 始终是不可删除的系统管理员，拥有 Key、用户、测试和备份的全部权限。Key 在 `/admin` 管理，普通查看用户和账号授权在独立的 `/users` 页面管理。
 
-- 普通用户只能访问看板，不能访问 `/admin` 或任何 `/api/admin/*` 接口。
+- 管理员可添加、修改、停用和删除普通用户，也可重置其用户名、密码和可查询账号。
+- 普通用户只能访问看板和 `/profile`，不能访问 `/admin`、`/users` 或任何 `/api/admin/*` 接口。
+- 普通用户可在 `/profile` 输入当前密码后修改自己的用户名或密码；修改成功后其他旧会话立即失效。
 - `/api/accounts` 只返回当前用户已授权且处于可用状态的账号。
 - `/api/usage` 会再次校验账号授权，手动修改账号 ID 不能越权查询。
 - 未分配账号时返回空列表，页面显示“暂未授权任何账号”，不会回退到任意全局账号。
-- 用户被停用或删除后，旧会话在下一次请求时立即失效。
+- 用户被停用、删除、改名或重置密码后，旧会话在下一次请求时立即失效，重新启用账号也不会恢复旧会话。
+- 系统管理员凭据由部署环境变量管理，不能从网页修改；修改容器 `.env` 或 Cloudflare Secret 后重新部署即可更换。
 - Docker 用户密码使用 scrypt 加盐哈希并存入独立 AES-256-GCM 加密文件；Workers 使用每用户随机盐和由 `KEY_ENCRYPTION_SECRET` 派生的 HKDF/HMAC-SHA256 校验值保存在 D1。接口和备份页面不会返回密码或密码哈希。
 
 ## 使用预构建镜像
@@ -115,6 +118,8 @@ curl http://127.0.0.1:3000/healthz
 
 - 看板：`http://服务器地址:3000/`
 - Key 管理：`http://服务器地址:3000/admin`
+- 用户管理：`http://服务器地址:3000/users`
+- 个人设置：`http://服务器地址:3000/profile`
 
 浏览器会要求输入 `.env` 中的 `WEB_USERNAME` 和 `WEB_PASSWORD`。首次访问会打开登录页，成功后使用 HttpOnly 会话 Cookie，不再依赖浏览器原生 Basic Auth 弹窗；Basic Auth 仍可用于脚本请求和旧客户端。`/healthz` 专门用于容器健康检查，不要求认证。
 
@@ -165,6 +170,8 @@ curl https://你的-worker地址/healthz
 
 - 看板：`https://你的-worker地址/`
 - Key 管理：`https://你的-worker地址/admin`
+- 用户管理：`https://你的-worker地址/users`
+- 个人设置：`https://你的-worker地址/profile`
 - 当前部署也绑定了自定义域名：`https://go.llmhost.net/` 和 `https://go.llmhost.net/admin`。`wrangler.jsonc` 中的 `custom_domain` 会让 Cloudflare 自动创建 DNS 记录并签发证书。
 - `/healthz`、登录页面、登录脚本和样式可匿名加载；登录接口用于建立会话。看板、后台和管理 API 需要会话 Cookie 或 Basic Auth。Workers 自动提供 HTTPS；仍应使用强密码。需要更严格的身份策略时可在外层再配置 Cloudflare Access。
 
@@ -295,7 +302,10 @@ npm run preview
 ```text
 GET    /                              Web 看板
 GET    /admin                         Key 管理后台
-GET    /api/me                        当前登录身份和角色
+GET    /users                         用户和账号授权管理
+GET    /profile                       当前用户个人设置
+GET    /api/me                        当前登录身份、角色和凭据类型
+PATCH  /api/me                        普通用户验证当前密码后修改用户名或密码
 GET    /api/accounts                  可用账号元数据
 GET    /api/usage?account=<id>        指定账号额度
 GET    /api/admin/users               用户与账号授权列表

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#f4f5f1">
+    <title>OpenCode Go 个人设置</title>
+    <link rel="stylesheet" href="/styles.css?v=users-2">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="OpenCode Go">
+          <span class="brand-mark" aria-hidden="true">GO</span>
+          <span class="brand-name">OpenCode Go</span>
+        </a>
+        <div class="toolbar">
+          <div class="language-switch" role="group" aria-label="Language">
+            <button type="button" data-locale="zh" aria-pressed="true">中文</button>
+            <button type="button" data-locale="en" aria-pressed="false">EN</button>
+          </div>
+          <button id="logout-button" class="command-button header-command" type="button" data-copy="logout">退出登录</button>
+          <a id="users-link" class="command-button secondary header-command" href="/users" data-copy="users" hidden>用户管理</a>
+          <a class="command-button secondary header-command" href="/" data-copy="dashboard">返回看板</a>
+        </div>
+      </header>
+
+      <main class="profile-main">
+        <section class="admin-heading">
+          <div>
+            <p class="eyebrow" data-copy="eyebrow">账户安全</p>
+            <h1 data-copy="title">个人设置</h1>
+            <p id="identity-summary">--</p>
+          </div>
+        </section>
+
+        <section id="profile-message" class="error-banner profile-message" role="status" hidden>
+          <strong id="profile-message-title"></strong>
+          <span id="profile-message-text"></span>
+        </section>
+
+        <section id="environment-admin" class="form-panel" hidden>
+          <h2 data-copy="adminTitle">系统管理员账号</h2>
+          <p class="profile-note" data-copy="adminManaged">管理员账号密码由容器或 Cloudflare 环境变量管理，不能在网页中修改。</p>
+        </section>
+
+        <section id="profile-editor" class="form-panel" hidden>
+          <h2 data-copy="editTitle">修改登录账号</h2>
+          <form id="profile-form" class="profile-form">
+            <div class="field">
+              <label for="profile-username" data-copy="username">新用户名</label>
+              <input id="profile-username" name="username" minlength="3" maxlength="64" autocomplete="username" required>
+            </div>
+            <div class="field">
+              <label for="current-password" data-copy="currentPassword">当前密码</label>
+              <input id="current-password" name="currentPassword" type="password" minlength="8" maxlength="128" autocomplete="current-password" required>
+            </div>
+            <div class="field">
+              <label for="new-password" data-copy="newPassword">新密码（不修改可留空）</label>
+              <input id="new-password" name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password">
+            </div>
+            <div class="field">
+              <label for="confirm-password" data-copy="confirmPassword">确认新密码</label>
+              <input id="confirm-password" name="confirmPassword" type="password" minlength="8" maxlength="128" autocomplete="new-password">
+            </div>
+            <button id="profile-save" class="command-button" type="submit" data-copy="save">保存账号和密码</button>
+          </form>
+        </section>
+      </main>
+
+      <footer><span>OpenCode Go</span><span data-copy="security">安全设置</span></footer>
+    </div>
+    <script type="module" src="/profile.js?v=users-2"></script>
+  </body>
+</html>

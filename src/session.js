@@ -49,6 +49,7 @@ export function sessionClaims(request, config, now = Date.now()) {
     const claims = JSON.parse(base64UrlDecode(encodedPayload));
     if (!claims || claims.version !== 1 || !["admin", "viewer"].includes(claims.role)
       || typeof claims.subject !== "string" || typeof claims.username !== "string"
+      || (claims.role === "viewer" && (!Number.isSafeInteger(claims.authVersion) || claims.authVersion < 1))
       || !Number.isSafeInteger(claims.expiresAt) || claims.expiresAt <= Math.floor(now / 1000)) return null;
     return claims;
   } catch {
@@ -73,6 +74,7 @@ export function sessionCookie(config, request, principal = {
     version: 1,
     expiresAt: Math.floor(now / 1000) + SESSION_MAX_AGE,
   };
+  if (principal.role === "viewer") claims.authVersion = principal.authVersion;
   const encodedPayload = base64UrlEncode(JSON.stringify(claims));
   const secure = request.socket?.encrypted || request.headers["x-forwarded-proto"] === "https";
   return `${SESSION_COOKIE}=${encodedPayload}.${signature(encodedPayload, config.webPassword)}; Max-Age=${SESSION_MAX_AGE}; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;

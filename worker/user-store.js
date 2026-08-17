@@ -85,6 +85,7 @@ function publicUser(row, accountIds = []) {
     username: row.username,
     enabled: Boolean(row.enabled),
     accountIds,
+    authVersion: Number(row.auth_version || 1),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -101,7 +102,11 @@ function validateBackupUser(user) {
   if (base64ToBytes(user.passwordHash).length !== PASSWORD_BYTES || base64ToBytes(user.passwordSalt).length !== 16) {
     throw new WorkerError("invalid_backup", "The backup user password data is invalid");
   }
-  return { ...user, username, usernameKey: usernameKey(username), accountIds };
+  const authVersion = user.authVersion === undefined ? 1 : user.authVersion;
+  if (!Number.isSafeInteger(authVersion) || authVersion < 1) {
+    throw new WorkerError("invalid_backup", "The backup user session version is invalid");
+  }
+  return { ...user, username, usernameKey: usernameKey(username), accountIds, authVersion };
 }
 
 export class UserStore {
@@ -175,9 +180,9 @@ export class UserStore {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const statements = [this.env.DB.prepare(`INSERT INTO users (
-      id, username, username_key, password_hash, password_salt, enabled, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(
-      id, username, normalizedKey, password.hash, password.salt, enabled ? 1 : 0, now, now,
+      id, username, username_key, password_hash, password_salt, enabled, auth_version, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+      id, username, normalizedKey, password.hash, password.salt, enabled ? 1 : 0, 1, now, now,
     )];
     statements.push(...accountIds.map((accountId) => this.env.DB.prepare(
       "INSERT INTO user_accounts (user_id, account_id) VALUES (?, ?)",
@@ -190,7 +195,7 @@ export class UserStore {
       }
       throw error;
     }
-    return { id, username, enabled, accountIds, createdAt: now, updatedAt: now };
+    return { id, username, enabled, accountIds, authVersion: 1, createdAt: now, updatedAt: now };
   }
 
   async update(id, input) {
@@ -209,16 +214,19 @@ export class UserStore {
       : (await this.getById(id)).accountIds;
     let passwordHash = row.password_hash;
     let passwordSalt = row.password_salt;
+    let invalidateSessions = username !== row.username || enabled !== Boolean(row.enabled);
     if (Object.hasOwn(input, "password") && input.password !== "") {
       const password = await hashUserPassword(normalizePassword(input.password, { optional: true }), this.env.KEY_ENCRYPTION_SECRET);
       passwordHash = password.hash;
       passwordSalt = password.salt;
+      invalidateSessions = true;
     }
+    const authVersion = Number(row.auth_version || 1) + (invalidateSessions ? 1 : 0);
     const now = new Date().toISOString();
     const statements = [
       this.env.DB.prepare(`UPDATE users SET username = ?, username_key = ?, password_hash = ?, password_salt = ?,
-        enabled = ?, updated_at = ? WHERE id = ?`).bind(
-        username, normalizedKey, passwordHash, passwordSalt, enabled ? 1 : 0, now, id,
+        enabled = ?, auth_version = ?, updated_at = ? WHERE id = ?`).bind(
+        username, normalizedKey, passwordHash, passwordSalt, enabled ? 1 : 0, authVersion, now, id,
       ),
       this.env.DB.prepare("DELETE FROM user_accounts WHERE user_id = ?").bind(id),
       ...accountIds.map((accountId) => this.env.DB.prepare(
@@ -233,7 +241,7 @@ export class UserStore {
       }
       throw error;
     }
-    return { id, username, enabled, accountIds, createdAt: row.created_at, updatedAt: now };
+    return { id, username, enabled, accountIds, authVersion, createdAt: row.created_at, updatedAt: now };
   }
 
   async remove(id) {
@@ -308,10 +316,10 @@ export class UserStore {
       this.env.DB.prepare("DELETE FROM users"),
       ...users.flatMap((user) => [
         this.env.DB.prepare(`INSERT INTO users (
-          id, username, username_key, password_hash, password_salt, enabled, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+          id, username, username_key, password_hash, password_salt, enabled, auth_version, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
           user.id, user.username, user.usernameKey, user.passwordHash, user.passwordSalt,
-          user.enabled ? 1 : 0, user.createdAt, user.updatedAt,
+          user.enabled ? 1 : 0, user.authVersion, user.createdAt, user.updatedAt,
         ),
         ...user.accountIds.map((accountId) => this.env.DB.prepare(
           "INSERT INTO user_accounts (user_id, account_id) VALUES (?, ?)",

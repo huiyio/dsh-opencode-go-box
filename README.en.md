@@ -40,13 +40,16 @@ Dates are stored as `YYYY-MM-DD` and evaluated in the `Asia/Shanghai` time zone.
 
 ## Users and permissions
 
-`WEB_USERNAME` / `WEB_PASSWORD` always identify the system administrator, who retains full key, user, model-test, and backup access. The administrator can create viewer users in `/admin` and assign visible accounts with checkboxes.
+`WEB_USERNAME` / `WEB_PASSWORD` always identify the non-deletable system administrator, who retains full key, user, model-test, and backup access. Keys are managed at `/admin`; viewer users and account assignments have a dedicated `/users` page.
 
-- Viewers can use only the dashboard and cannot access `/admin` or `/api/admin/*`.
+- Administrators can create, edit, disable, delete, rename, reset passwords, and change account assignments for viewer users.
+- Viewers can use only the dashboard and `/profile`; they cannot access `/admin`, `/users`, or `/api/admin/*`.
+- Viewers can change their own username or password at `/profile` after confirming the current password. Other existing sessions are invalidated after the change.
 - `/api/accounts` returns only assigned active accounts.
 - `/api/usage` checks the assignment again, so changing an account ID manually cannot bypass authorization.
 - A user with no assignments receives an empty account list; the service never falls back to a global account.
-- Disabling or deleting a user invalidates their existing session on the next request.
+- Disabling, deleting, renaming, or resetting a user password invalidates existing sessions on the next request. Re-enabling an account does not revive older sessions.
+- System administrator credentials remain deployment-managed. Change the container `.env` or Cloudflare Secret and redeploy to rotate them.
 - Docker hashes user passwords with scrypt inside a separate AES-256-GCM encrypted file. Workers stores per-user salted HKDF/HMAC-SHA256 verifiers keyed from `KEY_ENCRYPTION_SECRET` in D1. Passwords and password hashes are never returned by the user APIs.
 
 ## Deploy the published image
@@ -91,6 +94,8 @@ curl http://127.0.0.1:3000/healthz
 
 - Dashboard: `http://your-server:3000/`
 - Key management: `http://your-server:3000/admin`
+- User management: `http://your-server:3000/users`
+- Profile: `http://your-server:3000/profile`
 
 The browser prompts for `WEB_USERNAME` and `WEB_PASSWORD`. The first browser visit opens a login page and then uses an HttpOnly session cookie instead of relying on the browser-native Basic Auth dialog. Basic Auth remains compatible with scripts and legacy clients. `/healthz` remains unauthenticated for container health checks.
 
@@ -141,6 +146,8 @@ curl https://your-worker.example/healthz
 
 - Dashboard: `https://your-worker.example/`
 - Key management: `https://your-worker.example/admin`
+- User management: `https://your-worker.example/users`
+- Profile: `https://your-worker.example/profile`
 - This deployment also uses the custom domain `https://go.llmhost.net/` and `https://go.llmhost.net/admin`. The `custom_domain` entry in `wrangler.jsonc` lets Cloudflare create the DNS record and issue the certificate automatically.
 - `/healthz`, the login page assets, and the login endpoint are public so the browser can establish a session; the dashboard, admin page, and management APIs require a session cookie or Basic Auth. Workers provides HTTPS automatically. Use a strong password; Cloudflare Access can be added as an outer identity layer when needed.
 
@@ -267,7 +274,10 @@ The preview listens only on `127.0.0.1:57726` and stores local data under the Gi
 ```text
 GET    /                              Dashboard
 GET    /admin                         Key management
-GET    /api/me                        Current identity and role
+GET    /users                         User and account assignment management
+GET    /profile                       Current-user profile
+GET    /api/me                        Current identity, role, and credential source
+PATCH  /api/me                        Change a viewer username or password after password verification
 GET    /api/accounts                  Enabled account metadata
 GET    /api/usage?account=<id>        Selected account quota
 GET    /api/admin/users               Users and account assignments

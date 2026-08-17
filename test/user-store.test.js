@@ -50,8 +50,12 @@ test("EncryptedUserStore updates permissions and invalidates disabled or deleted
   });
   await store.revokeAccount("account-2");
   assert.deepEqual(store.getById(user.id).accountIds, ["account-1"]);
-  await store.update(user.id, { enabled: false, accountIds: [] });
+  const initialAuthVersion = (await store.authenticate("customer-b", "strong-password")).authVersion;
+  await store.update(user.id, { password: "replacement-password" });
   assert.equal(await store.authenticate("customer-b", "strong-password"), null);
+  assert.equal((await store.authenticate("customer-b", "replacement-password")).authVersion, initialAuthVersion + 1);
+  await store.update(user.id, { enabled: false, accountIds: [] });
+  assert.equal(await store.authenticate("customer-b", "replacement-password"), null);
   assert.equal(store.getEnabledById(user.id), null);
   await store.remove(user.id);
   assert.equal(store.getById(user.id), null);

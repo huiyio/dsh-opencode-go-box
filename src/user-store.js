@@ -67,6 +67,10 @@ function publicUser(user) {
   };
 }
 
+function authenticatedUser(user) {
+  return { ...publicUser(user), authVersion: user.authVersion };
+}
+
 async function hashPassword(password, salt = randomBytes(16)) {
   const hash = await scrypt(password, salt, PASSWORD_BYTES);
   return { salt: salt.toString("base64"), hash: Buffer.from(hash).toString("base64") };
@@ -133,7 +137,11 @@ function validateStoredUser(user) {
   if (hash.length !== PASSWORD_BYTES || salt.length !== 16) {
     throw new UserStoreError("invalid_user_store", "The stored user password data is invalid");
   }
-  return { ...user, username, usernameKey: usernameKey(username), accountIds };
+  const authVersion = user.authVersion === undefined ? 1 : user.authVersion;
+  if (!Number.isSafeInteger(authVersion) || authVersion < 1) {
+    throw new UserStoreError("invalid_user_store", "The stored user session version is invalid");
+  }
+  return { ...user, username, usernameKey: usernameKey(username), accountIds, authVersion };
 }
 
 export class EncryptedUserStore {
@@ -184,8 +192,9 @@ export class EncryptedUserStore {
   }
 
   getEnabledById(id) {
-    const user = this.getById(id);
-    return user?.enabled ? user : null;
+    this.#assertInitialized();
+    const user = this.users.find((candidate) => candidate.id === id && candidate.enabled);
+    return user ? authenticatedUser(user) : null;
   }
 
   async authenticate(username, password) {
@@ -194,7 +203,7 @@ export class EncryptedUserStore {
     const normalized = username.trim().toLowerCase();
     const user = this.users.find((candidate) => candidate.usernameKey === normalized && candidate.enabled);
     if (!user || !(await passwordMatches(password, user))) return null;
-    return publicUser(user);
+    return authenticatedUser(user);
   }
 
   async add({ username, password, enabled = true, accountIds = [] }) {
@@ -215,6 +224,7 @@ export class EncryptedUserStore {
         passwordSalt: passwordData.salt,
         enabled,
         accountIds: normalizeAccountIds(accountIds),
+        authVersion: 1,
         createdAt: timestamp,
         updatedAt: timestamp,
       };
@@ -228,6 +238,7 @@ export class EncryptedUserStore {
     return this.#mutate(async () => {
       const user = this.users.find((candidate) => candidate.id === id);
       if (!user) throw new UserStoreError("user_not_found", "User not found", 404);
+      let invalidateSessions = false;
       if (Object.hasOwn(changes, "username")) {
         const normalizedUsername = normalizeUsername(changes.username);
         const normalizedKey = usernameKey(normalizedUsername);
@@ -235,19 +246,27 @@ export class EncryptedUserStore {
           || this.users.some((candidate) => candidate.id !== id && candidate.usernameKey === normalizedKey)) {
           throw new UserStoreError("duplicate_username", "This username already exists", 409);
         }
-        user.username = normalizedUsername;
-        user.usernameKey = normalizedKey;
+        if (normalizedKey !== user.usernameKey || normalizedUsername !== user.username) {
+          user.username = normalizedUsername;
+          user.usernameKey = normalizedKey;
+          invalidateSessions = true;
+        }
       }
       if (Object.hasOwn(changes, "password") && changes.password !== "") {
         const passwordData = await hashPassword(normalizePassword(changes.password, { optional: true }));
         user.passwordHash = passwordData.hash;
         user.passwordSalt = passwordData.salt;
+        invalidateSessions = true;
       }
       if (Object.hasOwn(changes, "enabled")) {
         if (typeof changes.enabled !== "boolean") throw new UserStoreError("invalid_enabled", "enabled must be a boolean");
-        user.enabled = changes.enabled;
+        if (user.enabled !== changes.enabled) {
+          user.enabled = changes.enabled;
+          invalidateSessions = true;
+        }
       }
       if (Object.hasOwn(changes, "accountIds")) user.accountIds = normalizeAccountIds(changes.accountIds);
+      if (invalidateSessions) user.authVersion += 1;
       user.updatedAt = this.now().toISOString();
       await this.#persist();
       return publicUser(user);

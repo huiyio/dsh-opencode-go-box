@@ -31,6 +31,7 @@ const copy = {
     cancel: "取消",
     save: "保存",
     back: "返回看板",
+    manageUsers: "用户管理",
     logout: "退出登录",
     empty: "还没有保存的 Key",
     errorTitle: "操作失败",
@@ -113,6 +114,7 @@ const copy = {
     cancel: "Cancel",
     save: "Save",
     back: "Back to dashboard",
+    manageUsers: "User management",
     logout: "Sign out",
     empty: "No stored keys yet",
     errorTitle: "Operation failed",
@@ -173,6 +175,7 @@ const errorBanner = document.querySelector("#admin-error");
 const errorTitle = document.querySelector("#admin-error-title");
 const errorMessage = document.querySelector("#admin-error-message");
 const dashboardLink = document.querySelector("#dashboard-link");
+const usersLink = document.querySelector("#users-link");
 const logoutButton = document.querySelector("#logout-button");
 const editDialog = document.querySelector("#edit-dialog");
 const editForm = document.querySelector("#edit-form");
@@ -199,24 +202,9 @@ const testForm = document.querySelector("#test-form");
 const testModelError = document.querySelector("#test-model-error");
 const testModelSelect = document.querySelector("#test-model-select");
 const testSubmit = document.querySelector("#test-submit");
-const userAddForm = document.querySelector("#user-add-form");
-const userAddButton = document.querySelector("#user-add-button");
-const userPermissions = document.querySelector("#user-permissions");
-const userList = document.querySelector("#user-list");
-const userCount = document.querySelector("#user-count");
-const userEditDialog = document.querySelector("#user-edit-dialog");
-const userEditForm = document.querySelector("#user-edit-form");
-const userEditUsername = document.querySelector("#user-edit-username");
-const userEditPassword = document.querySelector("#user-edit-password");
-const userEditEnabled = document.querySelector("#user-edit-enabled");
-const userEditPermissions = document.querySelector("#user-edit-permissions");
-const userEditError = document.querySelector("#user-edit-error");
-
 let locale = readStoredLocale();
 let accounts = [];
-let users = [];
 let editingId = null;
-let editingUserId = null;
 let testAccountTarget = null;
 let busy = false;
 let usageGeneration = 0;
@@ -258,6 +246,8 @@ function setLocale(nextLocale) {
   });
   dashboardLink.title = t("back");
   dashboardLink.setAttribute("aria-label", t("back"));
+  usersLink.title = t("manageUsers");
+  usersLink.setAttribute("aria-label", t("manageUsers"));
   logoutButton.title = t("logout");
   logoutButton.setAttribute("aria-label", t("logout"));
   refreshAllButton.title = t("refreshAll");
@@ -267,9 +257,6 @@ function setLocale(nextLocale) {
   restoreButton.title = t("restore");
   restoreButton.setAttribute("aria-label", t("restore"));
   renderAccounts();
-  renderPermissionChoices(userPermissions, selectedPermissionIds(userPermissions));
-  renderPermissionChoices(userEditPermissions, selectedPermissionIds(userEditPermissions));
-  renderUsers();
 }
 
 function readAutoRefreshSetting() {
@@ -335,20 +322,13 @@ function applyAutoRefreshSetting() {
 function errorText(code) {
   if (code === "admin_disabled" || code === "key_store_disabled" || code === "user_store_disabled") return t("adminDisabled");
   if (code === "duplicate_key") return t("duplicate");
-  if (code === "duplicate_username") return t("duplicateUser");
   if (code === "invalid_backup") return t("invalidBackup");
   if (code === "invalid_lifecycle") return t("invalid");
-  if (code === "invalid_username" || code === "invalid_password" || code === "invalid_permissions") return t("invalidUser");
   if (code?.startsWith("invalid_")) return t("invalid");
   return t("generic");
 }
 
 function showError(error) {
-  if (userEditDialog.open) {
-    userEditError.textContent = errorText(error?.code);
-    userEditError.hidden = false;
-    return;
-  }
   if (editDialog.open) {
     editError.textContent = errorText(error?.code);
     editError.hidden = false;
@@ -363,8 +343,6 @@ function clearError() {
   errorBanner.hidden = true;
   editError.hidden = true;
   editError.textContent = "";
-  userEditError.hidden = true;
-  userEditError.textContent = "";
 }
 
 async function api(path, options = {}) {
@@ -390,118 +368,6 @@ function actionButton(label, className, handler) {
   button.disabled = busy;
   button.addEventListener("click", handler);
   return button;
-}
-
-function selectedPermissionIds(container) {
-  return [...container.querySelectorAll('input[type="checkbox"]:checked')].map((input) => input.value);
-}
-
-function renderPermissionChoices(container, selectedIds = []) {
-  const selected = new Set(selectedIds);
-  container.replaceChildren();
-  if (accounts.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "permission-empty";
-    empty.textContent = t("noPermissionOptions");
-    container.append(empty);
-    return;
-  }
-  for (const account of accounts) {
-    const label = document.createElement("label");
-    label.className = "permission-option";
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.value = account.id;
-    checkbox.checked = selected.has(account.id);
-    const text = document.createElement("span");
-    text.textContent = `${account.label} (${account.maskedKey})`;
-    label.append(checkbox, text);
-    container.append(label);
-  }
-}
-
-function renderUsers() {
-  userList.replaceChildren();
-  userCount.textContent = locale === "zh"
-    ? `${t("userCount")}：${users.length}`
-    : `${t("userCount")}: ${users.length}`;
-  if (users.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "empty-state";
-    empty.textContent = t("usersEmpty");
-    userList.append(empty);
-    return;
-  }
-  const accountById = new Map(accounts.map((account) => [account.id, account]));
-  for (const user of users) {
-    const row = document.createElement("article");
-    row.className = "user-row";
-    const identity = document.createElement("div");
-    identity.className = "user-identity";
-    const username = document.createElement("strong");
-    username.textContent = user.username;
-    const status = document.createElement("span");
-    status.className = `status-label${user.enabled ? "" : " is-disabled"}`;
-    status.textContent = user.enabled ? t("enabled") : t("disabled");
-    identity.append(username, status);
-
-    const permissions = document.createElement("div");
-    permissions.className = "user-permission-summary";
-    const assigned = user.accountIds.map((id) => accountById.get(id)?.label).filter(Boolean);
-    permissions.textContent = assigned.length > 0 ? assigned.join("、") : t("noPermissions");
-
-    const actions = document.createElement("div");
-    actions.className = "user-actions";
-    actions.append(
-      actionButton(t("editUser"), "secondary", () => openUserEdit(user)),
-      actionButton(t("remove"), "danger", () => removeUser(user)),
-    );
-    row.append(identity, permissions, actions);
-    userList.append(row);
-  }
-}
-
-async function loadUsers({ silent = false } = {}) {
-  try {
-    const payload = await api("/api/admin/users");
-    users = payload.users;
-    renderUsers();
-  } catch (error) {
-    if (!silent) showError(error);
-  }
-}
-
-function openUserEdit(user) {
-  clearError();
-  editingUserId = user.id;
-  userEditUsername.value = user.username;
-  userEditPassword.value = "";
-  userEditEnabled.checked = user.enabled;
-  renderPermissionChoices(userEditPermissions, user.accountIds);
-  userEditDialog.showModal();
-}
-
-async function runUserMutation(operation) {
-  if (busy) return;
-  busy = true;
-  userAddButton.disabled = true;
-  clearError();
-  renderUsers();
-  try {
-    await operation();
-    await loadUsers();
-  } catch (error) {
-    showError(error);
-  } finally {
-    busy = false;
-    userAddButton.disabled = false;
-    renderUsers();
-  }
-}
-
-async function removeUser(user) {
-  if (!window.confirm(t("confirmRemoveUser").replace("{username}", user.username))) return;
-  await runUserMutation(() => api(`/api/admin/users/${encodeURIComponent(user.id)}`, { method: "DELETE" }));
 }
 
 function formatRemaining(value) {
@@ -791,8 +657,6 @@ async function loadAccounts() {
     accounts = payload.accounts;
     clearError();
     renderAccounts();
-    renderPermissionChoices(userPermissions, selectedPermissionIds(userPermissions));
-    await loadUsers();
     await loadAccountUsages(false);
   } catch (error) {
     showError(error);
@@ -862,8 +726,6 @@ async function runMutation(operation) {
     await operation();
     const payload = await api("/api/admin/accounts");
     accounts = payload.accounts;
-    renderPermissionChoices(userPermissions, selectedPermissionIds(userPermissions));
-    await loadUsers({ silent: true });
     await loadAccountUsages(false);
   } catch (error) {
     showError(error);
@@ -975,48 +837,6 @@ editForm.addEventListener("submit", async (event) => {
     editDialog.close();
     editKey.value = "";
   });
-});
-
-userAddForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const formData = new FormData(userAddForm);
-  await runUserMutation(async () => {
-    await api("/api/admin/users", {
-      method: "POST",
-      body: JSON.stringify({
-        username: formData.get("username"),
-        password: formData.get("password"),
-        enabled: document.querySelector("#user-enabled").checked,
-        accountIds: selectedPermissionIds(userPermissions),
-      }),
-    });
-    userAddForm.reset();
-    document.querySelector("#user-enabled").checked = true;
-    renderPermissionChoices(userPermissions, []);
-  });
-});
-
-userEditForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const changes = {
-    username: userEditUsername.value,
-    enabled: userEditEnabled.checked,
-    accountIds: selectedPermissionIds(userEditPermissions),
-  };
-  if (userEditPassword.value) changes.password = userEditPassword.value;
-  await runUserMutation(async () => {
-    await api(`/api/admin/users/${encodeURIComponent(editingUserId)}`, {
-      method: "PATCH",
-      body: JSON.stringify(changes),
-    });
-    userEditDialog.close();
-    userEditPassword.value = "";
-  });
-});
-
-document.querySelector("#user-edit-cancel").addEventListener("click", () => {
-  clearError();
-  userEditDialog.close();
 });
 
 document.querySelector("#edit-cancel").addEventListener("click", () => {

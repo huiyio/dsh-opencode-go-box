@@ -77,6 +77,12 @@ function methodNotAllowed(allow) {
   return json(405, { ok: false, error: { code: "method_not_allowed", message: "Method not allowed" } }, { Allow: allow });
 }
 
+function isAdminPath(pathname) {
+  return pathname === "/admin" || pathname === "/admin.html" || pathname === "/admin.js"
+    || pathname === "/users" || pathname === "/users.html" || pathname === "/users.js"
+    || pathname.startsWith("/api/admin/");
+}
+
 async function readJsonBody(request, maxBytes = 16384) {
   if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) {
     throw new WorkerError("json_required", "Content-Type must be application/json", 415);
@@ -146,8 +152,47 @@ function filterAccounts(accounts, principal) {
 
 async function handleApi(request, env, url, principal, store, userStore, config) {
   if (url.pathname === "/api/me") {
-    if (request.method !== "GET") return methodNotAllowed("GET");
-    return json(200, { ok: true, user: { username: principal.username, role: principal.role } });
+    if (request.method === "GET") {
+      return json(200, {
+        ok: true,
+        user: {
+          username: principal.username,
+          role: principal.role,
+          canEditProfile: principal.role === "viewer",
+          credentialSource: principal.role === "admin" ? "environment" : "user_store",
+        },
+      });
+    }
+    if (request.method === "PATCH") {
+      if (principal.role !== "viewer") {
+        throw new WorkerError("admin_credentials_managed", "Administrator credentials are managed by environment variables", 409);
+      }
+      const body = await readJsonBody(request);
+      const verified = await userStore.authenticate(principal.username, body.currentPassword);
+      if (!verified || verified.id !== principal.subject) {
+        throw new WorkerError("current_password_invalid", "Current password is incorrect", 401);
+      }
+      const changes = {};
+      if (Object.hasOwn(body, "username")) changes.username = body.username;
+      if (Object.hasOwn(body, "password") && body.password !== "") changes.password = body.password;
+      if (Object.keys(changes).length === 0) {
+        throw new WorkerError("invalid_profile_update", "A new username or password is required");
+      }
+      await userStore.update(principal.subject, changes);
+      const updated = await userStore.getEnabledById(principal.subject);
+      const nextPrincipal = {
+        subject: updated.id,
+        username: updated.username,
+        role: "viewer",
+        accountIds: [...updated.accountIds],
+        authVersion: updated.authVersion,
+      };
+      return json(200, {
+        ok: true,
+        user: { username: updated.username, role: "viewer", canEditProfile: true, credentialSource: "user_store" },
+      }, { "Set-Cookie": await sessionCookie(env, request, nextPrincipal) });
+    }
+    return methodNotAllowed("GET, PATCH");
   }
 
   if (url.pathname === "/api/accounts") {
@@ -310,7 +355,7 @@ export default {
         const requestedNext = typeof body.next === "string" && body.next.startsWith("/") && !body.next.startsWith("//")
           ? body.next
           : "/";
-        const next = principal.role === "admin" || !requestedNext.startsWith("/admin") ? requestedNext : "/";
+        const next = principal.role === "admin" || !isAdminPath(new URL(requestedNext, url.origin).pathname) ? requestedNext : "/";
         return json(200, { ok: true, next }, { "Set-Cookie": await sessionCookie(env, request, principal) });
       } catch (error) {
         return reportError(error, request);
@@ -329,7 +374,7 @@ export default {
     }
     const principal = publicLoginRoute ? null : await resolvePrincipal(request, env, userStore);
     if (!publicLoginRoute && !principal) {
-      if ((url.pathname === "/" || url.pathname === "/admin") && (request.method === "GET" || request.method === "HEAD")) {
+      if (["/", "/admin", "/users", "/profile"].includes(url.pathname) && (request.method === "GET" || request.method === "HEAD")) {
         return new Response(null, {
           status: 302,
           headers: headers({ Location: `${url.origin}/login?next=${encodeURIComponent(`${url.pathname}${url.search}`)}` }),
@@ -337,8 +382,7 @@ export default {
       }
       return json(401, { ok: false, error: { code: "authentication_required", message: "Authentication required" } });
     }
-    const adminResource = url.pathname === "/admin" || url.pathname === "/admin.html" || url.pathname === "/admin.js"
-      || url.pathname.startsWith("/api/admin/");
+    const adminResource = isAdminPath(url.pathname);
     if (adminResource && principal.role !== "admin") {
       return json(403, { ok: false, error: { code: "admin_required", message: "Administrator access is required" } });
     }

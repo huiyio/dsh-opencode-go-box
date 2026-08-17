@@ -3,7 +3,7 @@ import test from "node:test";
 import { isAuthorized } from "../worker/auth.js";
 import { decryptApiKey, encryptApiKey, fingerprintApiKey } from "../worker/crypto.js";
 import { WorkerError } from "../worker/errors.js";
-import { sessionCookie } from "../worker/session.js";
+import { sessionClaims, sessionCookie } from "../worker/session.js";
 import { hashUserPassword, verifyUserPassword } from "../worker/user-store.js";
 import { listModels, normalizeUsage, testModel } from "../worker/upstream.js";
 
@@ -45,6 +45,22 @@ test("Worker session cookie authorizes the browser without Basic Auth", async ()
   assert.equal(await isAuthorized(request, env), true);
   const tampered = new Request("https://example.test/admin", { headers: { Cookie: `${cookie}x` } });
   assert.equal(await isAuthorized(tampered, env), false);
+});
+
+test("Worker viewer sessions carry the credential version used for invalidation", async () => {
+  const env = { WEB_USERNAME: "admin", WEB_PASSWORD: "strong-password" };
+  const principal = {
+    subject: "user-1",
+    username: "customer",
+    role: "viewer",
+    accountIds: [],
+    authVersion: 4,
+  };
+  const request = new Request("https://example.test/api/login");
+  const cookie = (await sessionCookie(env, request, principal)).split(";", 1)[0];
+  const claims = await sessionClaims(new Request("https://example.test/profile", { headers: { Cookie: cookie } }), env);
+  assert.equal(claims.subject, principal.subject);
+  assert.equal(claims.authVersion, 4);
 });
 
 test("Worker user passwords use salted secret-keyed verifiers", async () => {

@@ -66,6 +66,7 @@ export async function sessionClaims(request, env, now = Date.now()) {
     const claims = JSON.parse(base64UrlDecode(encodedPayload));
     if (!claims || claims.version !== 1 || !["admin", "viewer"].includes(claims.role)
       || typeof claims.subject !== "string" || typeof claims.username !== "string"
+      || (claims.role === "viewer" && (!Number.isSafeInteger(claims.authVersion) || claims.authVersion < 1))
       || !Number.isSafeInteger(claims.expiresAt) || claims.expiresAt <= Math.floor(now / 1000)) return null;
     return claims;
   } catch {
@@ -91,6 +92,7 @@ export async function sessionCookie(env, request, principal = null, now = Date.n
     version: 1,
     expiresAt: Math.floor(now / 1000) + SESSION_MAX_AGE,
   };
+  if (identity.role === "viewer") claims.authVersion = identity.authVersion;
   const encodedPayload = base64UrlEncode(JSON.stringify(claims));
   const secure = new URL(request.url).protocol === "https:";
   return `${SESSION_COOKIE}=${encodedPayload}.${await hmac(encodedPayload, env.WEB_PASSWORD)}; Max-Age=${SESSION_MAX_AGE}; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;

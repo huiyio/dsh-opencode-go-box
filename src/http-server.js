@@ -12,11 +12,17 @@ const STATIC_ROUTES = new Map([
   ["/index.html", "index.html"],
   ["/admin", "admin.html"],
   ["/admin.html", "admin.html"],
+  ["/users", "users.html"],
+  ["/users.html", "users.html"],
+  ["/profile", "profile.html"],
+  ["/profile.html", "profile.html"],
   ["/login", "login.html"],
   ["/login.html", "login.html"],
   ["/styles.css", "styles.css"],
   ["/app.js", "app.js"],
   ["/admin.js", "admin.js"],
+  ["/users.js", "users.js"],
+  ["/profile.js", "profile.js"],
   ["/login.js", "login.js"],
 ]);
 
@@ -75,7 +81,19 @@ function adminPrincipal(config) {
 }
 
 function viewerPrincipal(user) {
-  return { subject: user.id, username: user.username, role: "viewer", accountIds: [...user.accountIds] };
+  return {
+    subject: user.id,
+    username: user.username,
+    role: "viewer",
+    accountIds: [...user.accountIds],
+    authVersion: user.authVersion,
+  };
+}
+
+function isAdminPath(pathname) {
+  return pathname === "/admin" || pathname === "/admin.html" || pathname === "/admin.js"
+    || pathname === "/users" || pathname === "/users.html" || pathname === "/users.js"
+    || pathname.startsWith("/api/admin/");
 }
 
 async function authenticateCredentials(username, password, config, userStore) {
@@ -92,7 +110,7 @@ async function principalFromRequest(request, config, userStore) {
   }
   if (claims?.role === "viewer") {
     const user = userStore?.getEnabledById(claims.subject);
-    if (user && user.username === claims.username) return viewerPrincipal(user);
+    if (user && user.username === claims.username && user.authVersion === claims.authVersion) return viewerPrincipal(user);
   }
   const credentials = credentialsFromRequest(request);
   if (!credentials) return null;
@@ -218,7 +236,7 @@ export function createHttpServer({ config, accountService, userStore = null, pub
         const requestedNext = typeof body.next === "string" && body.next.startsWith("/") && !body.next.startsWith("//")
           ? body.next
           : "/";
-        const next = principal.role === "admin" || !requestedNext.startsWith("/admin") ? requestedNext : "/";
+        const next = principal.role === "admin" || !isAdminPath(new URL(requestedNext, "http://localhost").pathname) ? requestedNext : "/";
         sendJson(response, 200, { ok: true, next }, { "Set-Cookie": sessionCookie(config, request, principal) });
       } catch (error) {
         sendError(response, error, logger);
@@ -239,7 +257,7 @@ export function createHttpServer({ config, accountService, userStore = null, pub
       || url.pathname === "/login.js" || url.pathname === "/styles.css";
     const principal = publicLoginRoute ? null : await principalFromRequest(request, config, userStore);
     if (!publicLoginRoute && !principal) {
-      if ((url.pathname === "/" || url.pathname === "/admin") && (request.method === "GET" || request.method === "HEAD")) {
+      if (["/", "/admin", "/users", "/profile"].includes(url.pathname) && (request.method === "GET" || request.method === "HEAD")) {
         response.writeHead(302, { Location: `/login?next=${encodeURIComponent(`${url.pathname}${url.search}`)}`, ...securityHeaders() });
         response.end();
         return;
@@ -248,7 +266,7 @@ export function createHttpServer({ config, accountService, userStore = null, pub
       return;
     }
 
-    if (!publicLoginRoute && (url.pathname === "/admin" || url.pathname === "/admin.html" || url.pathname.startsWith("/api/admin/"))
+    if (!publicLoginRoute && isAdminPath(url.pathname)
       && !requireAdmin(response, principal)) return;
 
     if (!publicLoginRoute && typeof accountService.cleanupExpiredAccounts === "function") {
@@ -264,11 +282,48 @@ export function createHttpServer({ config, accountService, userStore = null, pub
     }
 
     if (url.pathname === "/api/me") {
-      if (request.method !== "GET") {
-        sendJson(response, 405, { ok: false, error: { code: "method_not_allowed", message: "Method not allowed" } }, { Allow: "GET" });
+      if (request.method === "GET") {
+        sendJson(response, 200, {
+          ok: true,
+          user: {
+            username: principal.username,
+            role: principal.role,
+            canEditProfile: principal.role === "viewer",
+            credentialSource: principal.role === "admin" ? "environment" : "user_store",
+          },
+        });
         return;
       }
-      sendJson(response, 200, { ok: true, user: { username: principal.username, role: principal.role } });
+      if (request.method === "PATCH") {
+        if (principal.role !== "viewer") {
+          sendJson(response, 409, { ok: false, error: { code: "admin_credentials_managed", message: "Administrator credentials are managed by environment variables" } });
+          return;
+        }
+        try {
+          const body = await readJsonBody(request);
+          const verified = await userStore?.authenticate(principal.username, body.currentPassword);
+          if (!verified || verified.id !== principal.subject) {
+            throw new HttpError("current_password_invalid", "Current password is incorrect", 401);
+          }
+          const changes = {};
+          if (Object.hasOwn(body, "username")) changes.username = body.username;
+          if (Object.hasOwn(body, "password") && body.password !== "") changes.password = body.password;
+          if (Object.keys(changes).length === 0) {
+            throw new HttpError("invalid_profile_update", "A new username or password is required");
+          }
+          await userStore.update(principal.subject, changes);
+          const updated = userStore.getEnabledById(principal.subject);
+          const nextPrincipal = viewerPrincipal(updated);
+          sendJson(response, 200, {
+            ok: true,
+            user: { username: nextPrincipal.username, role: nextPrincipal.role, canEditProfile: true, credentialSource: "user_store" },
+          }, { "Set-Cookie": sessionCookie(config, request, nextPrincipal) });
+        } catch (error) {
+          sendError(response, error, logger);
+        }
+        return;
+      }
+      sendJson(response, 405, { ok: false, error: { code: "method_not_allowed", message: "Method not allowed" } }, { Allow: "GET, PATCH" });
       return;
     }
 

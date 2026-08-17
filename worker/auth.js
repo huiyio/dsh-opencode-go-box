@@ -20,7 +20,13 @@ function adminPrincipal(env) {
 }
 
 function viewerPrincipal(user) {
-  return { subject: user.id, username: user.username, role: "viewer", accountIds: [...user.accountIds] };
+  return {
+    subject: user.id,
+    username: user.username,
+    role: "viewer",
+    accountIds: [...user.accountIds],
+    authVersion: user.authVersion,
+  };
 }
 
 export function authConfigured(env) {
@@ -42,7 +48,7 @@ export async function resolvePrincipal(request, env, userStore = new UserStore(e
   }
   if (claims?.role === "viewer") {
     const user = await userStore.getEnabledById(claims.subject);
-    if (user && user.username === claims.username) return viewerPrincipal(user);
+    if (user && user.username === claims.username && user.authVersion === claims.authVersion) return viewerPrincipal(user);
   }
   const credentials = decodeBasicCredentials(request.headers.get("Authorization"));
   if (!credentials) return null;

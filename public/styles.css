@@ -305,6 +305,11 @@ h1 {
   margin: 0 auto;
 }
 
+.profile-main {
+  width: min(760px, 100%);
+  margin: 0 auto;
+}
+
 .admin-heading {
   margin-bottom: 26px;
   display: flex;
@@ -624,6 +629,13 @@ h1 {
   background: var(--surface);
 }
 
+.standalone-user-form {
+  margin-bottom: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 .user-enabled-field {
   min-height: 42px;
 }
@@ -734,6 +746,30 @@ h1 {
   display: flex;
   justify-content: flex-end;
   gap: 7px;
+}
+
+.profile-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.profile-form > .command-button {
+  width: fit-content;
+  grid-column: 1 / -1;
+}
+
+.profile-note {
+  margin: 10px 0 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.profile-message.is-success {
+  color: var(--ok);
+  border-color: rgba(37, 130, 79, 0.28);
+  background: rgba(37, 130, 79, 0.06);
 }
 
 .quota-summary {
@@ -1230,13 +1266,19 @@ footer {
 
   .user-form,
   .user-row,
-  .permission-grid {
+  .permission-grid,
+  .profile-form {
     grid-template-columns: 1fr;
   }
 
   .user-form > .command-button {
     grid-column: auto;
     grid-row: auto;
+  }
+
+  .profile-form > .command-button {
+    grid-column: auto;
+    width: 100%;
   }
 
   .user-row {
