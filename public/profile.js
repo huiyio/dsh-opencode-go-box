@@ -2,7 +2,6 @@ const copy = {
   zh: {
     logout: "退出登录", users: "用户管理", dashboard: "返回看板", eyebrow: "账户安全", title: "个人设置",
     roleAdmin: "系统管理员", roleViewer: "普通用户", identity: "当前账号：{username} · {role}",
-    adminTitle: "系统管理员账号", adminManaged: "管理员账号密码由容器或 Cloudflare 环境变量管理，不能在网页中修改。",
     editTitle: "修改登录账号", username: "新用户名", currentPassword: "当前密码",
     newPassword: "新密码（不修改可留空）", confirmPassword: "确认新密码", save: "保存账号和密码",
     security: "安全设置", savedTitle: "修改成功", saved: "账号资料已更新，其他旧登录已失效。",
@@ -13,7 +12,6 @@ const copy = {
   en: {
     logout: "Sign out", users: "User management", dashboard: "Dashboard", eyebrow: "Account security", title: "Profile",
     roleAdmin: "Administrator", roleViewer: "Viewer", identity: "Current account: {username} · {role}",
-    adminTitle: "System administrator", adminManaged: "Administrator credentials are managed by container or Cloudflare environment variables and cannot be changed here.",
     editTitle: "Edit login account", username: "New username", currentPassword: "Current password",
     newPassword: "New password (leave empty to keep current)", confirmPassword: "Confirm new password", save: "Save account and password",
     security: "Security settings", savedTitle: "Updated", saved: "Your account was updated. Other existing sessions are now invalid.",
@@ -25,7 +23,6 @@ const copy = {
 
 const form = document.querySelector("#profile-form");
 const editor = document.querySelector("#profile-editor");
-const environmentAdmin = document.querySelector("#environment-admin");
 const usernameInput = document.querySelector("#profile-username");
 const currentPassword = document.querySelector("#current-password");
 const newPassword = document.querySelector("#new-password");
@@ -48,7 +45,6 @@ function renderIdentity() {
   identitySummary.textContent = t("identity").replace("{username}", identity.username).replace("{role}", role);
   usernameInput.value = identity.username;
   editor.hidden = !identity.canEditProfile;
-  environmentAdmin.hidden = identity.canEditProfile;
   usersLink.hidden = identity.role !== "admin";
 }
 

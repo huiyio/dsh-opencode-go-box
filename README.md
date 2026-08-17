@@ -40,7 +40,7 @@ OpenCode Go `/zen/go/v1/usage` 接口返回的是用量百分比，不是货币�
 
 ## 用户与权限
 
-环境变量 `WEB_USERNAME` / `WEB_PASSWORD` 始终是不可删除的系统管理员，拥有 Key、用户、测试和备份的全部权限。Key 在 `/admin` 管理，普通查看用户和账号授权在独立的 `/users` 页面管理。
+环境变量 `WEB_USERNAME` / `WEB_PASSWORD` 是首次部署的系统管理员凭据。管理员首次在 `/profile` 保存账号或密码后，系统会将管理员凭据加密持久化；管理员仍拥有 Key、用户、测试和备份的全部权限。Key 在 `/admin` 管理，普通查看用户和账号授权在独立的 `/users` 页面管理。
 
 - 管理员可添加、修改、停用和删除普通用户，也可重置其用户名、密码和可查询账号。
 - 普通用户只能访问看板和 `/profile`，不能访问 `/admin`、`/users` 或任何 `/api/admin/*` 接口。
@@ -49,8 +49,9 @@ OpenCode Go `/zen/go/v1/usage` 接口返回的是用量百分比，不是货币�
 - `/api/usage` 会再次校验账号授权，手动修改账号 ID 不能越权查询。
 - 未分配账号时返回空列表，页面显示“暂未授权任何账号”，不会回退到任意全局账号。
 - 用户被停用、删除、改名或重置密码后，旧会话在下一次请求时立即失效，重新启用账号也不会恢复旧会话。
-- 系统管理员凭据由部署环境变量管理，不能从网页修改；修改容器 `.env` 或 Cloudflare Secret 后重新部署即可更换。
-- Docker 用户密码使用 scrypt 加盐哈希并存入独立 AES-256-GCM 加密文件；Workers 使用每用户随机盐和由 `KEY_ENCRYPTION_SECRET` 派生的 HKDF/HMAC-SHA256 校验值保存在 D1。接口和备份页面不会返回密码或密码哈希。
+- 管理员和普通用户均可在 `/profile` 验证当前密码后修改账号或密码。管理员更新后，所有旧管理员会话会立即失效；管理员不能被删除。
+- 管理员凭据保存后，环境变量默认不再能登录。忘记管理员凭据时，临时设置 `WEB_ADMIN_RECOVERY=1` 并重新启动 Docker 或重新部署 Worker，即可用 `WEB_USERNAME` / `WEB_PASSWORD` 登录并重设；恢复完成后必须移除此设置或改回 `0`。
+- Docker 密码使用 scrypt 加盐哈希并存入 AES-256-GCM 加密文件；Workers 使用每用户随机盐和由 `KEY_ENCRYPTION_SECRET` 派生的 HKDF/HMAC-SHA256 校验值保存在 D1。接口和备份页面不会返回密码或密码哈希。
 
 ## 使用预构建镜像
 
@@ -123,6 +124,8 @@ curl http://127.0.0.1:3000/healthz
 
 浏览器会要求输入 `.env` 中的 `WEB_USERNAME` 和 `WEB_PASSWORD`。首次访问会打开登录页，成功后使用 HttpOnly 会话 Cookie，不再依赖浏览器原生 Basic Auth 弹窗；Basic Auth 仍可用于脚本请求和旧客户端。`/healthz` 专门用于容器健康检查，不要求认证。
 
+首次管理员登录后可进入 `/profile` 修改账号或密码。此操作会建立独立的系统管理员凭据，并使旧会话失效；之后 `.env` 中的登录凭据只在 `WEB_ADMIN_RECOVERY=1` 时作为紧急恢复入口。
+
 ## 部署到 Cloudflare Workers
 
 Workers 版与 Docker 版并存，复用同一套 Web UI 和 HTTP API，但运行时和 Key 存储互相独立。Docker 中已有的 `/data/keys.enc.json` 不会自动迁移到 D1；部署 Worker 后需要在 `/admin` 重新添加 Key。
@@ -150,6 +153,8 @@ npx wrangler secret put WEB_USERNAME
 npx wrangler secret put WEB_PASSWORD
 npx wrangler secret put KEY_ENCRYPTION_SECRET
 ```
+
+仅在管理员网页凭据丢失时，再临时设置 `WEB_ADMIN_RECOVERY` 为 `1` 并重新部署；恢复完成后将其删除或设为 `0`，不要把它长期保留为 Worker Secret。
 
 也可以生成一套随机强凭据并批量上传。生成文件已被 Git 忽略，包含登录密码和解密 D1 Key 所需的主密钥，必须作为敏感备份保管：
 
@@ -184,7 +189,7 @@ npm run worker:dev
 
 Workers 版的账号、加密 Key、用户权限和用量缓存存储在 D1。升级已有部署时，先备份 D1，再执行迁移和部署：
 
-也可以直接在 `/admin` 点击“下载备份”保存 JSON 文件，或点击“恢复备份”选择之前下载的文件。新版完整备份包含账号、加密 Key、用户、密码哈希和授权关系，其中用户部分再次使用 `KEY_ENCRYPTION_SECRET` 加密。恢复会覆盖当前部署中的全部账号和用户，并清空用量缓存；仍兼容旧版仅账号备份。Docker 和 Workers 备份格式不互通。
+也可以直接在 `/admin` 点击“下载备份”保存 JSON 文件，或点击“恢复备份”选择之前下载的文件。新版完整备份包含账号、加密 Key、普通用户、系统管理员密码校验值和授权关系，其中用户部分再次使用 `KEY_ENCRYPTION_SECRET` 加密。恢复会覆盖当前部署中的全部账号、用户和系统管理员凭据，并清空用量缓存；仍兼容旧版仅账号备份。Docker 和 Workers 备份格式不互通。
 
 ```sh
 npx wrangler d1 export opencode-go-balance --remote --output opencode-go-balance-backup.sql
@@ -227,6 +232,7 @@ docker compose ps
 | `IMAGE_TAG` | `latest` | Compose 拉取的 GHCR 镜像标签。 |
 | `WEB_USERNAME` | 空 | Web 登录用户名；Compose 部署必填。 |
 | `WEB_PASSWORD` | 空 | Web 登录密码；Compose 部署必填。 |
+| `WEB_ADMIN_RECOVERY` | `0` | 仅在忘记网页管理员凭据时临时设为 `1`，允许环境变量管理员恢复登录。恢复后应立即改回 `0`。 |
 | `KEY_ENCRYPTION_SECRET` | 空 | Key 存储主密钥，至少 32 字符；Compose 部署必填。 |
 | `OPENCODE_GO_API_KEY` | 空 | 可选的只读环境变量账号，也可在后台添加账号。 |
 | `PORT` | `3000` | 宿主机发布端口；容器内固定为 3000。 |
@@ -305,7 +311,7 @@ GET    /admin                         Key 管理后台
 GET    /users                         用户和账号授权管理
 GET    /profile                       当前用户个人设置
 GET    /api/me                        当前登录身份、角色和凭据类型
-PATCH  /api/me                        普通用户验证当前密码后修改用户名或密码
+PATCH  /api/me                        当前登录用户验证当前密码后修改用户名或密码
 GET    /api/accounts                  可用账号元数据
 GET    /api/usage?account=<id>        指定账号额度
 GET    /api/admin/users               用户与账号授权列表

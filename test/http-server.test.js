@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createHttpServer } from "../src/http-server.js";
+import { EncryptedUserStore } from "../src/user-store.js";
 
 const publicDir = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
 
@@ -349,4 +352,70 @@ test("viewer sessions only expose assigned accounts and can securely update thei
   assert.equal((await fetch(`${baseUrl}/api/usage`, { headers: updatedHeaders })).status, 404);
   viewer.enabled = false;
   assert.equal((await fetch(`${baseUrl}/api/accounts`, { headers: updatedHeaders })).status, 401);
+});
+
+test("administrator can move credentials into the encrypted store and invalidate previous sessions", async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), "opencode-go-admin-profile-"));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const config = {
+    apiKey: "",
+    webUsername: "bootstrap-admin",
+    webPassword: "environment-password",
+    webAdminRecovery: false,
+    keyEncryptionSecret: "administrator-test-secret-with-at-least-32-characters",
+    warnPercent: 60,
+    dangerPercent: 85,
+    refreshIntervalMs: 30000,
+  };
+  const userStore = new EncryptedUserStore({
+    filePath: join(directory, "users.enc.json"),
+    secret: config.keyEncryptionSecret,
+    reservedUsername: config.webUsername,
+  });
+  await userStore.init();
+  const accountService = {
+    configured: true,
+    adminEnabled: true,
+    listAccounts() { return []; },
+  };
+  const server = createHttpServer({ config, accountService, userStore, publicDir, logger: { error() {} } });
+  context.after(() => server.close());
+  const baseUrl = await listen(server);
+
+  const login = await fetch(`${baseUrl}/api/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "bootstrap-admin", password: "environment-password" }),
+  });
+  const bootstrapCookie = login.headers.get("set-cookie").split(";", 1)[0];
+  const updated = await fetch(`${baseUrl}/api/me`, {
+    method: "PATCH",
+    headers: { Cookie: bootstrapCookie, "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "system-admin", currentPassword: "environment-password", password: "system-password" }),
+  });
+  assert.equal(updated.status, 200);
+  assert.equal((await updated.clone().json()).user.credentialSource, "system");
+  const systemCookie = updated.headers.get("set-cookie").split(";", 1)[0];
+  assert.equal((await fetch(`${baseUrl}/api/me`, { headers: { Cookie: bootstrapCookie } })).status, 401);
+  const environmentLogin = await fetch(`${baseUrl}/api/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "bootstrap-admin", password: "environment-password" }),
+  });
+  assert.equal(environmentLogin.status, 401);
+  assert.equal((await fetch(`${baseUrl}/api/me`, { headers: { Cookie: systemCookie } })).status, 200);
+
+  const rotation = await fetch(`${baseUrl}/api/me`, {
+    method: "PATCH",
+    headers: { Cookie: systemCookie, "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "system-admin", currentPassword: "system-password", password: "rotated-system-password" }),
+  });
+  assert.equal(rotation.status, 200, await rotation.text());
+  assert.equal((await fetch(`${baseUrl}/api/me`, { headers: { Cookie: systemCookie } })).status, 401);
+  const rotatedLogin = await fetch(`${baseUrl}/api/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "system-admin", password: "rotated-system-password" }),
+  });
+  assert.equal(rotatedLogin.status, 200);
 });

@@ -57,6 +57,7 @@ export function readConfig(env = process.env) {
     dangerPercent,
     webUsername,
     webPassword,
+    webAdminRecovery: env.WEB_ADMIN_RECOVERY === "1",
     dataDir: env.DATA_DIR?.trim() || "./data",
     keyEncryptionSecret,
   });

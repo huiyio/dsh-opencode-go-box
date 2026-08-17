@@ -15,8 +15,15 @@ function decodeBasicCredentials(header) {
   }
 }
 
-function adminPrincipal(env) {
-  return { subject: "admin", username: env.WEB_USERNAME, role: "admin", accountIds: null };
+function adminPrincipal(administrator, source = "system") {
+  return {
+    subject: "admin",
+    username: administrator.username,
+    role: "admin",
+    accountIds: null,
+    authVersion: administrator.authVersion || 1,
+    credentialSource: source,
+  };
 }
 
 function viewerPrincipal(user) {
@@ -34,7 +41,12 @@ export function authConfigured(env) {
 }
 
 export async function authenticateCredentials(username, password, env, userStore = new UserStore(env)) {
-  if (await credentialsMatch(username, password, env)) return adminPrincipal(env);
+  const administrator = await userStore.authenticateAdministrator(username, password);
+  if (administrator) return adminPrincipal(administrator);
+  const configuredAdministrator = await userStore.getAdministrator();
+  if ((!configuredAdministrator || env.WEB_ADMIN_RECOVERY === "1") && await credentialsMatch(username, password, env)) {
+    return adminPrincipal({ username: env.WEB_USERNAME, authVersion: 1 }, configuredAdministrator ? "environment_recovery" : "environment_bootstrap");
+  }
   if (!env.DB) return null;
   const user = await userStore.authenticate(username, password);
   return user ? viewerPrincipal(user) : null;
@@ -43,8 +55,14 @@ export async function authenticateCredentials(username, password, env, userStore
 export async function resolvePrincipal(request, env, userStore = new UserStore(env)) {
   if (!authConfigured(env)) return null;
   const claims = await sessionClaims(request, env);
-  if (claims?.role === "admin" && claims.subject === "admin" && claims.username === env.WEB_USERNAME) {
-    return adminPrincipal(env);
+  if (claims?.role === "admin" && claims.subject === "admin") {
+    const administrator = await userStore.getAdministrator();
+    if (administrator && claims.username === administrator.username && claims.authVersion === administrator.authVersion) {
+      return adminPrincipal(administrator);
+    }
+    if (!administrator && claims.username === env.WEB_USERNAME && claims.authVersion === 1) {
+      return adminPrincipal({ username: env.WEB_USERNAME, authVersion: 1 }, "environment_bootstrap");
+    }
   }
   if (claims?.role === "viewer") {
     const user = await userStore.getEnabledById(claims.subject);

@@ -76,8 +76,15 @@ function credentialsFromRequest(request) {
   }
 }
 
-function adminPrincipal(config) {
-  return { subject: "admin", username: config.webUsername || "admin", role: "admin", accountIds: null };
+function adminPrincipal(administrator, source = "system") {
+  return {
+    subject: "admin",
+    username: administrator.username,
+    role: "admin",
+    accountIds: null,
+    authVersion: administrator.authVersion || 1,
+    credentialSource: source,
+  };
 }
 
 function viewerPrincipal(user) {
@@ -97,16 +104,27 @@ function isAdminPath(pathname) {
 }
 
 async function authenticateCredentials(username, password, config, userStore) {
-  if (credentialsMatch(username, password, config)) return adminPrincipal(config);
+  const administrator = await userStore?.authenticateAdministrator?.(username, password);
+  if (administrator) return adminPrincipal(administrator);
+  const configuredAdministrator = userStore?.getAdministrator?.();
+  if ((!configuredAdministrator || config.webAdminRecovery) && credentialsMatch(username, password, config)) {
+    return adminPrincipal({ username: config.webUsername || "admin", authVersion: 1 }, configuredAdministrator ? "environment_recovery" : "environment_bootstrap");
+  }
   const user = await userStore?.authenticate(username, password);
   return user ? viewerPrincipal(user) : null;
 }
 
 async function principalFromRequest(request, config, userStore) {
-  if (!config.webUsername && !config.webPassword) return adminPrincipal(config);
+  if (!config.webUsername && !config.webPassword) return adminPrincipal({ username: "admin", authVersion: 1 }, "unconfigured");
   const claims = sessionClaims(request, config);
-  if (claims?.role === "admin" && claims.subject === "admin" && claims.username === config.webUsername) {
-    return adminPrincipal(config);
+  if (claims?.role === "admin" && claims.subject === "admin") {
+    const administrator = userStore?.getAdministrator?.();
+    if (administrator && claims.username === administrator.username && claims.authVersion === administrator.authVersion) {
+      return adminPrincipal(administrator);
+    }
+    if (!administrator && claims.username === config.webUsername && claims.authVersion === 1) {
+      return adminPrincipal({ username: config.webUsername, authVersion: 1 }, "environment_bootstrap");
+    }
   }
   if (claims?.role === "viewer") {
     const user = userStore?.getEnabledById(claims.subject);
@@ -288,35 +306,39 @@ export function createHttpServer({ config, accountService, userStore = null, pub
           user: {
             username: principal.username,
             role: principal.role,
-            canEditProfile: principal.role === "viewer",
-            credentialSource: principal.role === "admin" ? "environment" : "user_store",
+            canEditProfile: principal.role === "viewer" || (principal.role === "admin" && userStore?.writable),
+            credentialSource: principal.role === "admin" ? principal.credentialSource : "user_store",
           },
         });
         return;
       }
       if (request.method === "PATCH") {
-        if (principal.role !== "viewer") {
-          sendJson(response, 409, { ok: false, error: { code: "admin_credentials_managed", message: "Administrator credentials are managed by environment variables" } });
+        if (principal.role === "admin" && !userStore?.writable) {
+          sendJson(response, 503, { ok: false, error: { code: "user_store_disabled", message: "Configure KEY_ENCRYPTION_SECRET to update administrator credentials" } });
           return;
         }
         try {
           const body = await readJsonBody(request);
-          const verified = await userStore?.authenticate(principal.username, body.currentPassword);
-          if (!verified || verified.id !== principal.subject) {
+          const verified = principal.role === "admin"
+            ? await authenticateCredentials(principal.username, body.currentPassword, config, userStore)
+            : await userStore?.authenticate(principal.username, body.currentPassword);
+          if (!verified || (principal.role === "admin" ? verified.subject : verified.id) !== principal.subject) {
             throw new HttpError("current_password_invalid", "Current password is incorrect", 401);
           }
           const changes = {};
           if (Object.hasOwn(body, "username")) changes.username = body.username;
           if (Object.hasOwn(body, "password") && body.password !== "") changes.password = body.password;
+          if (principal.role === "admin") changes.bootstrapPassword = body.currentPassword;
           if (Object.keys(changes).length === 0) {
             throw new HttpError("invalid_profile_update", "A new username or password is required");
           }
-          await userStore.update(principal.subject, changes);
-          const updated = userStore.getEnabledById(principal.subject);
-          const nextPrincipal = viewerPrincipal(updated);
+          const updated = principal.role === "admin"
+            ? await userStore.updateAdministrator(changes)
+            : await userStore.update(principal.subject, changes);
+          const nextPrincipal = principal.role === "admin" ? adminPrincipal(updated) : viewerPrincipal(userStore.getEnabledById(principal.subject));
           sendJson(response, 200, {
             ok: true,
-            user: { username: nextPrincipal.username, role: nextPrincipal.role, canEditProfile: true, credentialSource: "user_store" },
+            user: { username: nextPrincipal.username, role: nextPrincipal.role, canEditProfile: true, credentialSource: nextPrincipal.credentialSource || "user_store" },
           }, { "Set-Cookie": sessionCookie(config, request, nextPrincipal) });
         } catch (error) {
           sendError(response, error, logger);

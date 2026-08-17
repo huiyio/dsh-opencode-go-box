@@ -79,3 +79,24 @@ test("EncryptedUserStore rejects reserved and duplicate usernames and restores e
   assert.deepEqual(await store.restoreBackup(backup), { userCount: 1 });
   assert.equal(store.list()[0].username, "customer-c");
 });
+
+test("EncryptedUserStore persists a self-managed administrator and invalidates old sessions", async (context) => {
+  const { store } = await temporaryStore(context);
+  const initial = await store.updateAdministrator({
+    username: "control-room",
+    bootstrapPassword: "environment-password",
+  });
+  assert.equal(initial.username, "control-room");
+  assert.equal((await store.authenticateAdministrator("control-room", "environment-password")).authVersion, 1);
+  await assert.rejects(
+    store.add({ username: "control-room", password: "viewer-password", accountIds: [] }),
+    (error) => error instanceof UserStoreError && error.code === "duplicate_username",
+  );
+  const updated = await store.updateAdministrator({ username: "new-control-room", password: "new-admin-password" });
+  assert.equal(updated.authVersion, 2);
+  assert.equal(await store.authenticateAdministrator("control-room", "environment-password"), null);
+  assert.equal((await store.authenticateAdministrator("new-control-room", "new-admin-password")).authVersion, 2);
+  const backup = await store.exportBackup();
+  await store.restoreBackup(backup);
+  assert.equal((await store.authenticateAdministrator("new-control-room", "new-admin-password")).username, "new-control-room");
+});

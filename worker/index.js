@@ -158,38 +158,41 @@ async function handleApi(request, env, url, principal, store, userStore, config)
         user: {
           username: principal.username,
           role: principal.role,
-          canEditProfile: principal.role === "viewer",
-          credentialSource: principal.role === "admin" ? "environment" : "user_store",
+          canEditProfile: principal.role === "viewer" || (principal.role === "admin" && userStore.writable),
+          credentialSource: principal.role === "admin" ? principal.credentialSource : "user_store",
         },
       });
     }
     if (request.method === "PATCH") {
-      if (principal.role !== "viewer") {
-        throw new WorkerError("admin_credentials_managed", "Administrator credentials are managed by environment variables", 409);
+    if (principal.role === "admin" && !userStore.writable) {
+      throw new WorkerError("user_store_disabled", "Configure KEY_ENCRYPTION_SECRET to update administrator credentials", 503);
       }
       const body = await readJsonBody(request);
-      const verified = await userStore.authenticate(principal.username, body.currentPassword);
-      if (!verified || verified.id !== principal.subject) {
+    const verified = principal.role === "admin"
+      ? await authenticateCredentials(principal.username, body.currentPassword, env, userStore)
+      : await userStore.authenticate(principal.username, body.currentPassword);
+    if (!verified || (principal.role === "admin" ? verified.subject : verified.id) !== principal.subject) {
         throw new WorkerError("current_password_invalid", "Current password is incorrect", 401);
       }
-      const changes = {};
-      if (Object.hasOwn(body, "username")) changes.username = body.username;
-      if (Object.hasOwn(body, "password") && body.password !== "") changes.password = body.password;
+    const changes = {};
+    if (Object.hasOwn(body, "username")) changes.username = body.username;
+    if (Object.hasOwn(body, "password") && body.password !== "") changes.password = body.password;
+    if (principal.role === "admin") changes.bootstrapPassword = body.currentPassword;
       if (Object.keys(changes).length === 0) {
         throw new WorkerError("invalid_profile_update", "A new username or password is required");
       }
-      await userStore.update(principal.subject, changes);
-      const updated = await userStore.getEnabledById(principal.subject);
-      const nextPrincipal = {
-        subject: updated.id,
-        username: updated.username,
-        role: "viewer",
-        accountIds: [...updated.accountIds],
-        authVersion: updated.authVersion,
-      };
+    const updated = principal.role === "admin"
+      ? await userStore.updateAdministrator(changes)
+      : await userStore.update(principal.subject, changes);
+    const nextPrincipal = principal.role === "admin" ? {
+      subject: "admin", username: updated.username, role: "admin", accountIds: null, authVersion: updated.authVersion, credentialSource: "system",
+    } : (() => {
+      const user = updated;
+      return { subject: user.id, username: user.username, role: "viewer", accountIds: [...user.accountIds], authVersion: user.authVersion };
+    })();
       return json(200, {
         ok: true,
-        user: { username: updated.username, role: "viewer", canEditProfile: true, credentialSource: "user_store" },
+      user: { username: updated.username, role: nextPrincipal.role, canEditProfile: true, credentialSource: nextPrincipal.credentialSource || "user_store" },
       }, { "Set-Cookie": await sessionCookie(env, request, nextPrincipal) });
     }
     return methodNotAllowed("GET, PATCH");

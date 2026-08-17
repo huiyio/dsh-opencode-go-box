@@ -40,7 +40,7 @@ Dates are stored as `YYYY-MM-DD` and evaluated in the `Asia/Shanghai` time zone.
 
 ## Users and permissions
 
-`WEB_USERNAME` / `WEB_PASSWORD` always identify the non-deletable system administrator, who retains full key, user, model-test, and backup access. Keys are managed at `/admin`; viewer users and account assignments have a dedicated `/users` page.
+`WEB_USERNAME` / `WEB_PASSWORD` are the bootstrap system-administrator credentials. After an administrator saves a username or password at `/profile`, the administrator credential is stored persistently and encrypted; it retains full key, user, model-test, and backup access. Keys are managed at `/admin`; viewer users and account assignments have a dedicated `/users` page.
 
 - Administrators can create, edit, disable, delete, rename, reset passwords, and change account assignments for viewer users.
 - Viewers can use only the dashboard and `/profile`; they cannot access `/admin`, `/users`, or `/api/admin/*`.
@@ -49,8 +49,9 @@ Dates are stored as `YYYY-MM-DD` and evaluated in the `Asia/Shanghai` time zone.
 - `/api/usage` checks the assignment again, so changing an account ID manually cannot bypass authorization.
 - A user with no assignments receives an empty account list; the service never falls back to a global account.
 - Disabling, deleting, renaming, or resetting a user password invalidates existing sessions on the next request. Re-enabling an account does not revive older sessions.
-- System administrator credentials remain deployment-managed. Change the container `.env` or Cloudflare Secret and redeploy to rotate them.
-- Docker hashes user passwords with scrypt inside a separate AES-256-GCM encrypted file. Workers stores per-user salted HKDF/HMAC-SHA256 verifiers keyed from `KEY_ENCRYPTION_SECRET` in D1. Passwords and password hashes are never returned by the user APIs.
+- Administrators and viewers can change their own username or password at `/profile` after confirming the current password. An administrator update invalidates every older administrator session; the administrator cannot be deleted.
+- After administrator credentials are stored, environment credentials no longer log in by default. To recover access, temporarily set `WEB_ADMIN_RECOVERY=1`, restart Docker or redeploy the Worker, then use `WEB_USERNAME` / `WEB_PASSWORD` to sign in and reset the credentials. Remove the setting or return it to `0` immediately after recovery.
+- Docker hashes passwords with scrypt inside an AES-256-GCM encrypted file. Workers stores salted HKDF/HMAC-SHA256 verifiers keyed from `KEY_ENCRYPTION_SECRET` in D1. Passwords and password hashes are never returned by the APIs.
 
 ## Deploy the published image
 
@@ -99,6 +100,8 @@ curl http://127.0.0.1:3000/healthz
 
 The browser prompts for `WEB_USERNAME` and `WEB_PASSWORD`. The first browser visit opens a login page and then uses an HttpOnly session cookie instead of relying on the browser-native Basic Auth dialog. Basic Auth remains compatible with scripts and legacy clients. `/healthz` remains unauthenticated for container health checks.
 
+After bootstrap login, use `/profile` to change the administrator username or password. This creates the independent system-administrator credential and invalidates older sessions; the `.env` credentials become emergency recovery credentials only when `WEB_ADMIN_RECOVERY=1`.
+
 ## Deploy to Cloudflare Workers
 
 The Workers and Docker deployments coexist and share the same UI and HTTP API, but their runtimes and key stores are independent. Existing Docker `/data/keys.enc.json` data is not migrated automatically; add the keys again at `/admin` after deploying the Worker.
@@ -126,6 +129,8 @@ npx wrangler secret put WEB_USERNAME
 npx wrangler secret put WEB_PASSWORD
 npx wrangler secret put KEY_ENCRYPTION_SECRET
 ```
+
+Only when Web administrator credentials are lost, temporarily set `WEB_ADMIN_RECOVERY` to `1` and redeploy. Delete it or return it to `0` after recovery; do not retain it as a long-lived Worker Secret.
 
 Alternatively, generate strong random credentials and upload them in bulk. The generated file is Git-ignored and contains both the login password and the master secret required to decrypt D1 keys, so keep it as a sensitive backup:
 
@@ -160,7 +165,7 @@ npm run worker:dev
 
 Worker accounts, encrypted keys, user permissions, and usage cache are stored in D1. Back up D1 before applying migrations to an existing deployment:
 
-You can also click `Download backup` in `/admin` and later choose that JSON file with `Restore backup`. A current full backup includes accounts, encrypted keys, users, password hashes, and permission assignments; the user portion is encrypted again with `KEY_ENCRYPTION_SECRET`. Restore replaces all accounts and users and clears the usage cache. Legacy account-only backups remain accepted. Docker and Workers backup formats are intentionally incompatible.
+You can also click `Download backup` in `/admin` and later choose that JSON file with `Restore backup`. A current full backup includes accounts, encrypted keys, viewers, the system-administrator verifier, and permission assignments; the user portion is encrypted again with `KEY_ENCRYPTION_SECRET`. Restore replaces all accounts, users, and the system-administrator credential, and clears the usage cache. Legacy account-only backups remain accepted. Docker and Workers backup formats are intentionally incompatible.
 
 ```sh
 npx wrangler d1 export opencode-go-balance --remote --output opencode-go-balance-backup.sql
@@ -201,6 +206,7 @@ The named data volume is not removed when the image changes.
 | `IMAGE_TAG` | `latest` | GHCR image tag used by Compose. |
 | `WEB_USERNAME` | empty | Web login username; required by Compose. |
 | `WEB_PASSWORD` | empty | Web login password; required by Compose. |
+| `WEB_ADMIN_RECOVERY` | `0` | Set to `1` only for emergency recovery with the environment administrator credentials; return it to `0` afterwards. |
 | `KEY_ENCRYPTION_SECRET` | empty | Key encryption secret, at least 32 characters; required by Compose. |
 | `OPENCODE_GO_API_KEY` | empty | Optional read-only environment account; accounts can also be added in the admin UI. |
 | `PORT` | `3000` | Published host port; the container listens on 3000. |
@@ -277,7 +283,7 @@ GET    /admin                         Key management
 GET    /users                         User and account assignment management
 GET    /profile                       Current-user profile
 GET    /api/me                        Current identity, role, and credential source
-PATCH  /api/me                        Change a viewer username or password after password verification
+PATCH  /api/me                        Change the current user's username or password after password verification
 GET    /api/accounts                  Enabled account metadata
 GET    /api/usage?account=<id>        Selected account quota
 GET    /api/admin/users               Users and account assignments

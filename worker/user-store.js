@@ -91,6 +91,15 @@ function publicUser(row, accountIds = []) {
   };
 }
 
+function publicAdministrator(row) {
+  return row ? {
+    username: row.username,
+    authVersion: Number(row.auth_version || 1),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  } : null;
+}
+
 function validateBackupUser(user) {
   if (!user || typeof user !== "object" || typeof user.id !== "string" || user.id.length < 1 || user.id.length > 100
     || typeof user.passwordHash !== "string" || typeof user.passwordSalt !== "string"
@@ -107,6 +116,21 @@ function validateBackupUser(user) {
     throw new WorkerError("invalid_backup", "The backup user session version is invalid");
   }
   return { ...user, username, usernameKey: usernameKey(username), accountIds, authVersion };
+}
+
+function validateBackupAdministrator(administrator) {
+  if (!administrator || typeof administrator !== "object" || typeof administrator.passwordHash !== "string"
+    || typeof administrator.passwordSalt !== "string" || typeof administrator.createdAt !== "string"
+    || typeof administrator.updatedAt !== "string") {
+    throw new WorkerError("invalid_backup", "The backup administrator data is invalid");
+  }
+  const username = normalizeUsername(administrator.username);
+  const authVersion = administrator.authVersion === undefined ? 1 : administrator.authVersion;
+  if (base64ToBytes(administrator.passwordHash).length !== PASSWORD_BYTES || base64ToBytes(administrator.passwordSalt).length !== 16
+    || !Number.isSafeInteger(authVersion) || authVersion < 1) {
+    throw new WorkerError("invalid_backup", "The backup administrator credential data is invalid");
+  }
+  return { ...administrator, username, usernameKey: usernameKey(username), authVersion };
 }
 
 export class UserStore {
@@ -155,6 +179,56 @@ export class UserStore {
     return this.getById(row.id);
   }
 
+  async getAdministrator() {
+    if (!this.env.DB) return null;
+    return publicAdministrator(await this.env.DB.prepare("SELECT * FROM system_administrator WHERE singleton = 1").first());
+  }
+
+  async authenticateAdministrator(username, password) {
+    if (!this.env.DB || typeof username !== "string" || typeof password !== "string") return null;
+    const row = await this.env.DB.prepare("SELECT * FROM system_administrator WHERE singleton = 1 AND username_key = ?")
+      .bind(username.trim().toLowerCase()).first();
+    if (!row || !(await verifyUserPassword(password, row.password_hash, row.password_salt, this.env.KEY_ENCRYPTION_SECRET))) return null;
+    return publicAdministrator(row);
+  }
+
+  async updateAdministrator(input) {
+    if (!this.writable) throw new WorkerError("user_store_disabled", "Configure KEY_ENCRYPTION_SECRET to update administrator credentials", 503);
+    const existing = await this.env.DB.prepare("SELECT * FROM system_administrator WHERE singleton = 1").first();
+    const username = Object.hasOwn(input, "username") ? normalizeUsername(input.username) : existing?.username;
+    const password = Object.hasOwn(input, "password") && input.password !== "" ? normalizePassword(input.password) : null;
+    const bootstrapPassword = !existing ? normalizePassword(password || input.bootstrapPassword) : null;
+    if (!username || (!existing && !bootstrapPassword)) {
+      throw new WorkerError("invalid_profile_update", "A new username or password is required");
+    }
+    const normalizedKey = usernameKey(username);
+    const conflictingUser = await this.env.DB.prepare("SELECT id FROM users WHERE username_key = ?").bind(normalizedKey).first();
+    if (conflictingUser) throw new WorkerError("duplicate_username", "This username already exists", 409);
+    const now = new Date().toISOString();
+    if (!existing) {
+      const verifier = await hashUserPassword(bootstrapPassword, this.env.KEY_ENCRYPTION_SECRET);
+      await this.env.DB.prepare(`INSERT INTO system_administrator (
+        singleton, username, username_key, password_hash, password_salt, auth_version, created_at, updated_at
+      ) VALUES (1, ?, ?, ?, ?, 1, ?, ?)`).bind(username, normalizedKey, verifier.hash, verifier.salt, now, now).run();
+      return { username, authVersion: 1, createdAt: now, updatedAt: now };
+    }
+    const changed = username !== existing.username || Boolean(password);
+    if (!changed) throw new WorkerError("invalid_profile_update", "A new username or password is required");
+    let passwordHash = existing.password_hash;
+    let passwordSalt = existing.password_salt;
+    if (password) {
+      const verifier = await hashUserPassword(password, this.env.KEY_ENCRYPTION_SECRET);
+      passwordHash = verifier.hash;
+      passwordSalt = verifier.salt;
+    }
+    const authVersion = Number(existing.auth_version || 1) + 1;
+    await this.env.DB.prepare(`UPDATE system_administrator SET username = ?, username_key = ?, password_hash = ?,
+      password_salt = ?, auth_version = ?, updated_at = ? WHERE singleton = 1`).bind(
+      username, normalizedKey, passwordHash, passwordSalt, authVersion, now,
+    ).run();
+    return { username, authVersion, createdAt: existing.created_at, updatedAt: now };
+  }
+
   async validateAccountIds(value) {
     const ids = normalizeAccountIds(value);
     const result = await this.env.DB.prepare("SELECT id FROM accounts").all();
@@ -170,7 +244,8 @@ export class UserStore {
     if (!this.writable) throw new WorkerError("user_store_disabled", "User management is disabled", 503);
     const username = normalizeUsername(input?.username);
     const normalizedKey = usernameKey(username);
-    if (normalizedKey === String(this.env.WEB_USERNAME || "").trim().toLowerCase()) {
+    const administrator = await this.getAdministrator();
+    if (normalizedKey === String(this.env.WEB_USERNAME || "").trim().toLowerCase() || normalizedKey === administrator?.username.toLowerCase()) {
       throw new WorkerError("duplicate_username", "This username already exists", 409);
     }
     const enabled = input?.enabled === undefined ? true : input.enabled;
@@ -204,7 +279,8 @@ export class UserStore {
     if (!row) throw new WorkerError("user_not_found", "User not found", 404);
     const username = Object.hasOwn(input, "username") ? normalizeUsername(input.username) : row.username;
     const normalizedKey = usernameKey(username);
-    if (normalizedKey === String(this.env.WEB_USERNAME || "").trim().toLowerCase()) {
+    const administrator = await this.getAdministrator();
+    if (normalizedKey === String(this.env.WEB_USERNAME || "").trim().toLowerCase() || normalizedKey === administrator?.username.toLowerCase()) {
       throw new WorkerError("duplicate_username", "This username already exists", 409);
     }
     const enabled = Object.hasOwn(input, "enabled") ? input.enabled : Boolean(row.enabled);
@@ -277,15 +353,24 @@ export class UserStore {
     const users = await this.list();
     const rows = await this.env.DB.prepare("SELECT id, password_hash, password_salt FROM users").all();
     const passwordById = new Map(rows.results.map((row) => [row.id, row]));
-    const payload = users.map((user) => ({
+    const usersWithCredentials = users.map((user) => ({
       ...user,
       passwordHash: passwordById.get(user.id).password_hash,
       passwordSalt: passwordById.get(user.id).password_salt,
     }));
+    const administratorRow = await this.env.DB.prepare("SELECT * FROM system_administrator WHERE singleton = 1").first();
+    const administrator = administratorRow ? {
+      username: administratorRow.username,
+      passwordHash: administratorRow.password_hash,
+      passwordSalt: administratorRow.password_salt,
+      authVersion: Number(administratorRow.auth_version || 1),
+      createdAt: administratorRow.created_at,
+      updatedAt: administratorRow.updated_at,
+    } : null;
     return {
       format: "opencode-go-workers-users-encrypted-v1",
       exportedAt: new Date().toISOString(),
-      store: await encryptApiKey(this.env.KEY_ENCRYPTION_SECRET, USER_BACKUP_ID, JSON.stringify({ version: 1, users: payload })),
+      store: await encryptApiKey(this.env.KEY_ENCRYPTION_SECRET, USER_BACKUP_ID, JSON.stringify({ version: 1, users: usersWithCredentials, administrator })),
     };
   }
 
@@ -303,9 +388,11 @@ export class UserStore {
       throw new WorkerError("invalid_backup", "The backup user data is invalid");
     }
     const users = payload.users.map(validateBackupUser);
+    const administrator = payload.administrator ? validateBackupAdministrator(payload.administrator) : null;
     if (new Set(users.map((user) => user.id)).size !== users.length
       || new Set(users.map((user) => user.usernameKey)).size !== users.length
-      || users.some((user) => user.usernameKey === String(this.env.WEB_USERNAME || "").trim().toLowerCase())) {
+      || users.some((user) => user.usernameKey === String(this.env.WEB_USERNAME || "").trim().toLowerCase())
+      || (administrator && users.some((user) => user.usernameKey === administrator.usernameKey))) {
       throw new WorkerError("invalid_backup", "The backup contains duplicate or reserved users");
     }
     const validAccountIds = new Set((await this.env.DB.prepare("SELECT id FROM accounts").all()).results.map((row) => row.id));
@@ -314,6 +401,7 @@ export class UserStore {
     const statements = [
       this.env.DB.prepare("DELETE FROM user_accounts"),
       this.env.DB.prepare("DELETE FROM users"),
+      this.env.DB.prepare("DELETE FROM system_administrator"),
       ...users.flatMap((user) => [
         this.env.DB.prepare(`INSERT INTO users (
           id, username, username_key, password_hash, password_salt, enabled, auth_version, created_at, updated_at
@@ -325,6 +413,12 @@ export class UserStore {
           "INSERT INTO user_accounts (user_id, account_id) VALUES (?, ?)",
         ).bind(user.id, accountId)),
       ]),
+      ...(administrator ? [this.env.DB.prepare(`INSERT INTO system_administrator (
+        singleton, username, username_key, password_hash, password_salt, auth_version, created_at, updated_at
+      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?)`).bind(
+        administrator.username, administrator.usernameKey, administrator.passwordHash, administrator.passwordSalt,
+        administrator.authVersion, administrator.createdAt, administrator.updatedAt,
+      )] : []),
     ];
     await this.env.DB.batch(statements);
     return { userCount: users.length };

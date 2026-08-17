@@ -1,4 +1,6 @@
 WEB_USERNAME=admin
 WEB_PASSWORD=replace-with-a-strong-password
 KEY_ENCRYPTION_SECRET=replace-with-at-least-32-random-characters
+# Set to 1 only while intentionally recovering administrator access with the two variables above.
+WEB_ADMIN_RECOVERY=0
 # OPENCODE_GO_API_KEY=optional-read-only-environment-key

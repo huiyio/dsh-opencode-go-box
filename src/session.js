@@ -15,6 +15,10 @@ function signature(payload, secret) {
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }
 
+function signingSecret(config) {
+  return config.keyEncryptionSecret || config.webPassword;
+}
+
 function secureTextEqual(left, right) {
   if (typeof left !== "string" || typeof right !== "string") return false;
   const expected = createHmac("sha256", "opencode-go-credential-comparison").update(right).digest();
@@ -37,19 +41,19 @@ export function credentialsMatch(username, password, config) {
 
 export function sessionClaims(request, config, now = Date.now()) {
   const token = cookiesFromRequest(request).get(SESSION_COOKIE);
-  if (!token || !config.webPassword) return null;
+  if (!token || !signingSecret(config)) return null;
   const separator = token.lastIndexOf(".");
   if (separator < 1) return null;
   const encodedPayload = token.slice(0, separator);
   const providedSignature = token.slice(separator + 1);
-  const expectedSignature = signature(encodedPayload, config.webPassword);
+  const expectedSignature = signature(encodedPayload, signingSecret(config));
   if (providedSignature.length !== expectedSignature.length
     || !timingSafeEqual(Buffer.from(providedSignature), Buffer.from(expectedSignature))) return null;
   try {
     const claims = JSON.parse(base64UrlDecode(encodedPayload));
     if (!claims || claims.version !== 1 || !["admin", "viewer"].includes(claims.role)
       || typeof claims.subject !== "string" || typeof claims.username !== "string"
-      || (claims.role === "viewer" && (!Number.isSafeInteger(claims.authVersion) || claims.authVersion < 1))
+      || !Number.isSafeInteger(claims.authVersion) || claims.authVersion < 1
       || !Number.isSafeInteger(claims.expiresAt) || claims.expiresAt <= Math.floor(now / 1000)) return null;
     return claims;
   } catch {
@@ -74,10 +78,10 @@ export function sessionCookie(config, request, principal = {
     version: 1,
     expiresAt: Math.floor(now / 1000) + SESSION_MAX_AGE,
   };
-  if (principal.role === "viewer") claims.authVersion = principal.authVersion;
+  claims.authVersion = principal.authVersion || 1;
   const encodedPayload = base64UrlEncode(JSON.stringify(claims));
   const secure = request.socket?.encrypted || request.headers["x-forwarded-proto"] === "https";
-  return `${SESSION_COOKIE}=${encodedPayload}.${signature(encodedPayload, config.webPassword)}; Max-Age=${SESSION_MAX_AGE}; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
+  return `${SESSION_COOKIE}=${encodedPayload}.${signature(encodedPayload, signingSecret(config))}; Max-Age=${SESSION_MAX_AGE}; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
 }
 
 export function clearSessionCookie() {

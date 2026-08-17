@@ -71,6 +71,15 @@ function authenticatedUser(user) {
   return { ...publicUser(user), authVersion: user.authVersion };
 }
 
+function publicAdministrator(administrator) {
+  return administrator ? {
+    username: administrator.username,
+    authVersion: administrator.authVersion,
+    createdAt: administrator.createdAt,
+    updatedAt: administrator.updatedAt,
+  } : null;
+}
+
 async function hashPassword(password, salt = randomBytes(16)) {
   const hash = await scrypt(password, salt, PASSWORD_BYTES);
   return { salt: salt.toString("base64"), hash: Buffer.from(hash).toString("base64") };
@@ -144,6 +153,22 @@ function validateStoredUser(user) {
   return { ...user, username, usernameKey: usernameKey(username), accountIds, authVersion };
 }
 
+function validateStoredAdministrator(administrator) {
+  if (!administrator || typeof administrator !== "object" || typeof administrator.passwordHash !== "string"
+    || typeof administrator.passwordSalt !== "string" || typeof administrator.createdAt !== "string"
+    || typeof administrator.updatedAt !== "string") {
+    throw new UserStoreError("invalid_user_store", "The stored administrator data is invalid");
+  }
+  const username = normalizeUsername(administrator.username);
+  const hash = Buffer.from(administrator.passwordHash, "base64");
+  const salt = Buffer.from(administrator.passwordSalt, "base64");
+  const authVersion = administrator.authVersion === undefined ? 1 : administrator.authVersion;
+  if (hash.length !== PASSWORD_BYTES || salt.length !== 16 || !Number.isSafeInteger(authVersion) || authVersion < 1) {
+    throw new UserStoreError("invalid_user_store", "The stored administrator credential data is invalid");
+  }
+  return { ...administrator, username, usernameKey: usernameKey(username), authVersion };
+}
+
 export class EncryptedUserStore {
   constructor({ filePath, secret, reservedUsername = "", now = () => new Date(), createId = randomUUID }) {
     this.filePath = filePath;
@@ -152,6 +177,7 @@ export class EncryptedUserStore {
     this.now = now;
     this.createId = createId;
     this.users = [];
+    this.administrator = null;
     this.initialized = false;
     this.mutationQueue = Promise.resolve();
   }
@@ -171,6 +197,7 @@ export class EncryptedUserStore {
       const payload = await decryptPayload(this.secret, envelope);
       if (!payload || payload.version !== 1 || !Array.isArray(payload.users)) throw new Error("Invalid user store payload");
       this.users = payload.users.map(validateStoredUser);
+      this.administrator = payload.administrator ? validateStoredAdministrator(payload.administrator) : null;
       this.#assertUnique(this.users);
     } catch (error) {
       if (error?.code !== "ENOENT") {
@@ -206,11 +233,66 @@ export class EncryptedUserStore {
     return authenticatedUser(user);
   }
 
+  getAdministrator() {
+    this.#assertInitialized();
+    return publicAdministrator(this.administrator);
+  }
+
+  async authenticateAdministrator(username, password) {
+    this.#assertInitialized();
+    if (!this.administrator || typeof username !== "string" || username.trim().toLowerCase() !== this.administrator.usernameKey) return null;
+    return (await passwordMatches(password, this.administrator)) ? publicAdministrator(this.administrator) : null;
+  }
+
+  async updateAdministrator(changes) {
+    return this.#mutate(async () => {
+      const existing = this.administrator;
+      const username = Object.hasOwn(changes, "username") ? normalizeUsername(changes.username) : existing?.username;
+      const password = Object.hasOwn(changes, "password") && changes.password !== "" ? normalizePassword(changes.password) : null;
+      const bootstrapPassword = !existing ? normalizePassword(password || changes.bootstrapPassword) : null;
+      if (!username || (!existing && !bootstrapPassword)) {
+        throw new UserStoreError("invalid_profile_update", "A new username or password is required");
+      }
+      const normalizedKey = usernameKey(username);
+      if (this.users.some((user) => user.usernameKey === normalizedKey)) {
+        throw new UserStoreError("duplicate_username", "This username already exists", 409);
+      }
+      const timestamp = this.now().toISOString();
+      if (!existing) {
+        const passwordData = await hashPassword(bootstrapPassword);
+        this.administrator = {
+          username,
+          usernameKey: normalizedKey,
+          passwordHash: passwordData.hash,
+          passwordSalt: passwordData.salt,
+          authVersion: 1,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+      } else {
+        let changed = username !== existing.username;
+        existing.username = username;
+        existing.usernameKey = normalizedKey;
+        if (password) {
+          const passwordData = await hashPassword(password);
+          existing.passwordHash = passwordData.hash;
+          existing.passwordSalt = passwordData.salt;
+          changed = true;
+        }
+        if (!changed) throw new UserStoreError("invalid_profile_update", "A new username or password is required");
+        existing.authVersion += 1;
+        existing.updatedAt = timestamp;
+      }
+      await this.#persist();
+      return publicAdministrator(this.administrator);
+    });
+  }
+
   async add({ username, password, enabled = true, accountIds = [] }) {
     return this.#mutate(async () => {
       const normalizedUsername = normalizeUsername(username);
       const normalizedKey = usernameKey(normalizedUsername);
-      if (normalizedKey === this.reservedUsername || this.users.some((user) => user.usernameKey === normalizedKey)) {
+      if (this.#isReservedUsername(normalizedKey) || this.users.some((user) => user.usernameKey === normalizedKey)) {
         throw new UserStoreError("duplicate_username", "This username already exists", 409);
       }
       if (typeof enabled !== "boolean") throw new UserStoreError("invalid_enabled", "enabled must be a boolean");
@@ -242,7 +324,7 @@ export class EncryptedUserStore {
       if (Object.hasOwn(changes, "username")) {
         const normalizedUsername = normalizeUsername(changes.username);
         const normalizedKey = usernameKey(normalizedUsername);
-        if (normalizedKey === this.reservedUsername
+        if (this.#isReservedUsername(normalizedKey)
           || this.users.some((candidate) => candidate.id !== id && candidate.usernameKey === normalizedKey)) {
           throw new UserStoreError("duplicate_username", "This username already exists", 409);
         }
@@ -321,7 +403,7 @@ export class EncryptedUserStore {
     return {
       format: "opencode-go-docker-users-encrypted-v1",
       exportedAt: new Date().toISOString(),
-      store: await encryptPayload(this.secret, { version: 1, users: this.users }),
+      store: await encryptPayload(this.secret, { version: 1, users: this.users, administrator: this.administrator }),
     };
   }
 
@@ -340,6 +422,8 @@ export class EncryptedUserStore {
         throw new UserStoreError("invalid_backup", "The backup user data is invalid");
       }
       const restored = payload.users.map(validateStoredUser);
+      const administrator = payload.administrator ? validateStoredAdministrator(payload.administrator) : null;
+      this.administrator = administrator;
       this.#assertUnique(restored);
       this.users = restored;
       await this.#persist();
@@ -359,19 +443,24 @@ export class EncryptedUserStore {
   #assertUnique(users) {
     if (new Set(users.map((user) => user.id)).size !== users.length
       || new Set(users.map((user) => user.usernameKey)).size !== users.length
-      || users.some((user) => user.usernameKey === this.reservedUsername)) {
+      || users.some((user) => this.#isReservedUsername(user.usernameKey))) {
       throw new UserStoreError("invalid_user_store", "The user store contains duplicate or reserved users");
     }
+  }
+
+  #isReservedUsername(key) {
+    return key === this.reservedUsername || key === this.administrator?.usernameKey;
   }
 
   #mutate(operation) {
     const run = this.mutationQueue.then(async () => {
       this.#assertWritable();
-      const snapshot = structuredClone(this.users);
+      const snapshot = structuredClone({ users: this.users, administrator: this.administrator });
       try {
         return await operation();
       } catch (error) {
-        this.users = snapshot;
+        this.users = snapshot.users;
+        this.administrator = snapshot.administrator;
         throw error;
       }
     });
@@ -380,7 +469,7 @@ export class EncryptedUserStore {
   }
 
   async #persist() {
-    const envelope = await encryptPayload(this.secret, { version: 1, users: this.users });
+    const envelope = await encryptPayload(this.secret, { version: 1, users: this.users, administrator: this.administrator });
     await mkdir(dirname(this.filePath), { recursive: true, mode: 0o700 });
     const temporaryPath = `${this.filePath}.tmp-${process.pid}-${randomUUID()}`;
     await writeFile(temporaryPath, `${JSON.stringify(envelope, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
