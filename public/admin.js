@@ -1,7 +1,7 @@
 const copy = {
   zh: {
     eyebrow: "账号管理",
-    title: "OpenCode Go Keys",
+    title: "Key 管理",
     subtitle: "添加和管理额度看板使用的账号",
     addTitle: "添加 Key",
     label: "账号名称",
