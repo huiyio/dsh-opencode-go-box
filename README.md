@@ -12,6 +12,7 @@
 ## 功能
 
 - 在 `/admin` 添加、编辑、启停和删除多个 OpenCode Go API Key。
+- 每个 Key 资产节点都可以单独点击“刷新额度”，只强制查询该 Key，不会刷新其他账号；“测试模型”仍是发送真实模型请求的独立操作。
 - 每个账号显示 5 小时、7 天和 30 天窗口的剩余百分比、已用百分比及重置时间。
 - 后台支持按秒或分钟设置自动刷新，设置保存在当前浏览器。
 - 从官方模型列表选择模型，再发送最小真实请求测试 Key 是否可调用。
@@ -313,7 +314,7 @@ GET    /profile                       当前用户个人设置
 GET    /api/me                        当前登录身份、角色和凭据类型
 PATCH  /api/me                        当前登录用户验证当前密码后修改用户名或密码
 GET    /api/accounts                  可用账号元数据
-GET    /api/usage?account=<id>        指定账号额度
+GET    /api/usage?account=<id>        指定账号额度（加 `&refresh=1` 强制绕过该账号缓存）
 GET    /api/admin/users               用户与账号授权列表
 POST   /api/admin/users               添加普通用户
 PATCH  /api/admin/users/<id>          编辑用户、重置密码、启停或修改授权

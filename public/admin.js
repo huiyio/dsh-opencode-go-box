@@ -47,6 +47,8 @@ const copy = {
     upstreamUnavailable: "暂时无法连接上游服务。",
     confirmRemove: "确定删除账号“{label}”？此操作无法撤销。",
     refreshAll: "刷新全部额度",
+    refreshKey: "刷新额度",
+    refreshingKey: "刷新中",
     remainingQuota: "剩余",
     reset: "重置",
     quotaFailed: "查询失败",
@@ -152,6 +154,8 @@ const copy = {
     upstreamUnavailable: "The upstream service is currently unreachable.",
     confirmRemove: "Delete account “{label}”? This cannot be undone.",
     refreshAll: "Refresh all quotas",
+    refreshKey: "Refresh quota",
+    refreshingKey: "Refreshing",
     remainingQuota: "Remaining",
     reset: "Resets",
     quotaFailed: "Query failed",
@@ -258,9 +262,12 @@ let editingId = null;
 let testAccountTarget = null;
 let busy = false;
 let usageGeneration = 0;
+let usageRequestSequence = 0;
 let autoRefreshTimer = null;
 let usageLoadPromise = null;
 const usageByAccount = new Map();
+const usageRequestByAccount = new Map();
+const refreshingAccounts = new Set();
 const testingAccounts = new Set();
 const testResults = new Map();
 
@@ -425,6 +432,16 @@ function actionButton(label, className, handler) {
   button.disabled = busy;
   button.addEventListener("click", handler);
   return button;
+}
+
+function beginUsageRequest(accountId) {
+  const requestId = ++usageRequestSequence;
+  usageRequestByAccount.set(accountId, requestId);
+  return requestId;
+}
+
+function isCurrentUsageRequest(accountId, requestId) {
+  return usageRequestByAccount.get(accountId) === requestId;
 }
 
 function formatRemaining(value) {
@@ -728,6 +745,15 @@ function renderAccounts() {
 
     const actions = document.createElement("div");
     actions.className = "account-actions";
+    const isRefreshing = refreshingAccounts.has(account.id);
+    const refreshButton = actionButton(
+      isRefreshing ? t("refreshingKey") : t("refreshKey"),
+      "secondary refresh-button",
+      () => refreshAccountUsage(account),
+    );
+    refreshButton.disabled = busy || lifecycleState !== "active" || isRefreshing || usageByAccount.get(account.id)?.kind === "loading";
+    refreshButton.classList.toggle("is-loading", isRefreshing);
+    actions.append(refreshButton);
     if (account.editable) {
       actions.append(
         actionButton(t("edit"), "secondary", () => openEdit(account)),
@@ -859,11 +885,20 @@ async function performLoadAccountUsages(force) {
   for (const id of usageByAccount.keys()) {
     if (!currentIds.has(id)) {
       usageByAccount.delete(id);
+      usageRequestByAccount.delete(id);
+      refreshingAccounts.delete(id);
       testingAccounts.delete(id);
       testResults.delete(id);
     }
   }
+  const requestIds = new Map();
   for (const account of accounts) {
+    if (lifecycleStateFor(account) === "active") {
+      requestIds.set(account.id, beginUsageRequest(account.id));
+    } else {
+      usageRequestByAccount.delete(account.id);
+      refreshingAccounts.delete(account.id);
+    }
     usageByAccount.set(account.id, {
       kind: lifecycleStateFor(account) === "active" ? "loading" : "disabled",
     });
@@ -877,14 +912,17 @@ async function performLoadAccountUsages(force) {
     while (next < enabledAccounts.length) {
       const account = enabledAccounts[next];
       next += 1;
+      const requestId = requestIds.get(account.id);
       try {
         const parameters = new URLSearchParams({ account: account.id });
         if (force) parameters.set("refresh", "1");
         const payload = await api(`/api/usage?${parameters}`);
         if (generation !== usageGeneration) return;
+        if (!isCurrentUsageRequest(account.id, requestId)) continue;
         usageByAccount.set(account.id, { kind: "done", value: payload });
       } catch (error) {
         if (generation !== usageGeneration) return;
+        if (!isCurrentUsageRequest(account.id, requestId)) continue;
         usageByAccount.set(account.id, { kind: "failed", error });
       }
       renderAccounts();
@@ -895,6 +933,26 @@ async function performLoadAccountUsages(force) {
   if (generation === usageGeneration) {
     refreshAllButton.disabled = false;
     refreshAllButton.classList.remove("is-loading");
+  }
+}
+
+async function refreshAccountUsage(account) {
+  if (busy || lifecycleStateFor(account) !== "active" || refreshingAccounts.has(account.id)) return;
+  const requestId = beginUsageRequest(account.id);
+  refreshingAccounts.add(account.id);
+  usageByAccount.set(account.id, { kind: "loading" });
+  clearError();
+  renderAccounts();
+
+  try {
+    const parameters = new URLSearchParams({ account: account.id, refresh: "1" });
+    const payload = await api(`/api/usage?${parameters}`);
+    if (isCurrentUsageRequest(account.id, requestId)) usageByAccount.set(account.id, { kind: "done", value: payload });
+  } catch (error) {
+    if (isCurrentUsageRequest(account.id, requestId)) usageByAccount.set(account.id, { kind: "failed", error });
+  } finally {
+    refreshingAccounts.delete(account.id);
+    renderAccounts();
   }
 }
 

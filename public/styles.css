@@ -1610,9 +1610,13 @@ select:disabled {
   grid-column: 9 / 13;
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(72px, 1fr));
+  grid-template-columns: repeat(4, minmax(72px, 1fr));
   align-self: start;
   gap: 6px;
+}
+
+.account-actions .refresh-button:only-child {
+  grid-column: 1 / -1;
 }
 
 .account-actions .command-button,
@@ -2073,7 +2077,7 @@ footer {
   }
 
   .account-actions {
-    grid-template-columns: repeat(3, minmax(66px, 1fr));
+    grid-template-columns: repeat(4, minmax(60px, 1fr));
   }
 }
 
@@ -2175,7 +2179,7 @@ footer {
   .account-actions {
     grid-column: 1 / -1;
     grid-row: 2;
-    grid-template-columns: repeat(3, minmax(0, 128px));
+    grid-template-columns: repeat(4, minmax(0, 128px));
     justify-content: end;
   }
 
@@ -2576,7 +2580,7 @@ footer {
   }
 
   .account-actions {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .quota-metric {
@@ -2749,10 +2753,6 @@ footer {
 
   .account-actions {
     grid-template-columns: 1fr 1fr;
-  }
-
-  .account-actions .command-button:last-child {
-    grid-column: 1 / -1;
   }
 
   .auth-intro,
