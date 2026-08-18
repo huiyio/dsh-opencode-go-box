@@ -563,7 +563,7 @@ select:disabled {
   padding: 12px 14px;
   margin-bottom: 14px;
   border: 1px solid var(--rule);
-  border-left: 4px solid var(--graphite);
+  border-left: 4px solid var(--signal);
   border-radius: 2px;
   background: var(--paper);
 }
@@ -1402,31 +1402,130 @@ select:disabled {
   margin: 0 0 4px;
 }
 
-.account-list,
+.key-batch-toolbar {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px 18px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--rule-strong);
+  background: var(--paper-muted);
+}
+
+.key-select-visible {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 730;
+  cursor: pointer;
+}
+
+.key-select-visible input,
+.account-selector input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin: 0;
+  accent-color: var(--signal);
+}
+
+.key-select-visible:has(input:disabled) {
+  color: var(--ink-muted);
+  cursor: not-allowed;
+}
+
+.selection-summary {
+  min-width: 0;
+  color: var(--ink-muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.key-batch-toolbar .command-button {
+  min-width: 116px;
+  min-height: 36px;
+}
+
+.account-list {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  background: var(--canvas);
+}
+
 .user-list {
   min-width: 0;
 }
 
 .account-row,
 .key-node {
+  position: relative;
   min-width: 0;
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 12px 16px;
-  padding: 17px 18px 18px;
+  padding: 17px 18px 18px 56px;
+  border: 1px solid var(--rule-strong);
   border-left: 4px solid var(--graphite);
+  border-radius: 3px;
   background: var(--paper);
-}
-
-.account-row + .account-row,
-.key-node + .key-node {
-  border-top: 1px solid var(--rule);
+  box-shadow: 0 1px 2px rgba(17, 28, 47, 0.06);
 }
 
 .account-row:hover,
 .key-node:hover,
 .user-row:hover {
   background: #f8faff;
+}
+
+.account-row.is-selected,
+.key-node.is-selected,
+.account-row.is-selected:hover,
+.key-node.is-selected:hover {
+  border-color: var(--signal);
+  border-left-color: var(--signal-strong);
+  background: var(--signal-soft);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.16);
+}
+
+.account-selector {
+  position: absolute;
+  top: 11px;
+  left: 10px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.account-selector:hover {
+  border-color: var(--rule-strong);
+  background: var(--paper);
+}
+
+.account-selector:has(input:focus-visible) {
+  outline: 3px solid rgba(37, 99, 235, 0.24);
+  outline-offset: 1px;
+}
+
+.account-selector input:focus-visible {
+  outline: none;
+}
+
+.account-selector:has(input:disabled) {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 .account-identity,
@@ -1697,6 +1796,11 @@ select:disabled {
   color: var(--ink-muted);
   font-size: 14px;
   text-align: center;
+}
+
+.account-list > .empty-state {
+  border: 1px solid var(--rule);
+  background: var(--paper);
 }
 
 .key-table-header {
@@ -3285,7 +3389,15 @@ footer {
 
 @media (max-width: 720px) {
   .account-row,
-  .key-node { grid-template-columns: 1fr; }
+  .key-node {
+    grid-template-columns: 1fr;
+    padding: 15px 13px 15px 50px;
+  }
+  .account-list { gap: 10px; padding: 10px; }
+  .account-selector { top: 10px; left: 7px; width: 38px; height: 38px; }
+  .key-batch-toolbar { grid-template-columns: minmax(0, 1fr) auto; gap: 7px 12px; }
+  .selection-summary { justify-self: end; text-align: right; }
+  .key-batch-toolbar .command-button { width: 100%; grid-column: 1 / -1; }
   .account-identity,
   .lifecycle-panel,
   .account-test,
@@ -3309,6 +3421,9 @@ footer {
 }
 
 @media (max-width: 430px) {
+  .key-batch-toolbar { grid-template-columns: 1fr; }
+  .selection-summary { justify-self: start; text-align: left; }
+  .key-batch-toolbar .command-button { grid-column: 1; }
   .access-stat-grid { grid-template-columns: 1fr; }
   .access-stat + .access-stat { border-left: 0; border-top-width: 1px; }
   .reset-node { grid-template-columns: 42px minmax(0, 1fr) auto; }

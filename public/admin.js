@@ -90,6 +90,15 @@ const copy = {
     visibleCount: "显示",
     filteredEmpty: "没有符合筛选条件的 Key 资产",
     searchPlaceholder: "搜索账号或 Key 尾号",
+    selectVisible: "全选当前结果",
+    batchToolbar: "Key 批量操作",
+    selectAccount: "选择账号 {label}",
+    selectedSummary: "已选 {count} 项 · 当前可见 {visible} 项",
+    batchDelete: "批量删除",
+    batchDeleting: "正在删除 {count} 项",
+    batchConfirm: "确定永久删除选中的 {count} 个 Key？同时会撤销用户对这些 Key 的查看权限，此操作无法撤销。",
+    batchPartialTitle: "批量删除未完全完成",
+    batchPartialResult: "成功删除 {success} 个，失败 {failed} 个。失败项已保留选择，可再次重试。",
     usersTitle: "用户管理",
     usersSubtitle: "用户只能查看已授权的账号额度，未授权时看不到任何账号数据",
     username: "用户名",
@@ -196,6 +205,15 @@ const copy = {
     visibleCount: "Showing",
     filteredEmpty: "No key assets match this filter",
     searchPlaceholder: "Search account or key suffix",
+    selectVisible: "Select current results",
+    batchToolbar: "Key batch actions",
+    selectAccount: "Select account {label}",
+    selectedSummary: "{count} selected · {visible} visible",
+    batchDelete: "Delete selected",
+    batchDeleting: "Deleting {count}",
+    batchConfirm: "Permanently delete the selected {count} keys? User access to these keys will also be revoked. This cannot be undone.",
+    batchPartialTitle: "Batch deletion incomplete",
+    batchPartialResult: "Deleted {success}; {failed} failed. Failed items remain selected so you can retry.",
     usersTitle: "User management",
     usersSubtitle: "Users can only view assigned accounts; unassigned users receive no account data",
     username: "Username",
@@ -220,6 +238,10 @@ const accountList = document.querySelector("#account-list");
 const accountCount = document.querySelector("#account-count");
 const accountSearch = document.querySelector("#account-search");
 const accountFilter = document.querySelector("#account-filter");
+const keyBatchToolbar = document.querySelector(".key-batch-toolbar");
+const selectVisibleAccounts = document.querySelector("#select-visible-accounts");
+const selectedAccountCount = document.querySelector("#selected-account-count");
+const deleteSelectedAccountsButton = document.querySelector("#delete-selected-accounts");
 const keySummaryTotal = document.querySelector("#key-summary-total");
 const keySummaryActive = document.querySelector("#key-summary-active");
 const keySummaryRisk = document.querySelector("#key-summary-risk");
@@ -265,11 +287,14 @@ let usageGeneration = 0;
 let usageRequestSequence = 0;
 let autoRefreshTimer = null;
 let usageLoadPromise = null;
+let batchDeleting = false;
+let batchDeleteCount = 0;
 const usageByAccount = new Map();
 const usageRequestByAccount = new Map();
 const refreshingAccounts = new Set();
 const testingAccounts = new Set();
 const testResults = new Map();
+const selectedAccountIds = new Set();
 
 const AUTO_REFRESH_STORAGE_KEY = "opencode-go-admin-refresh";
 const MIN_AUTO_REFRESH_MS = 10000;
@@ -284,6 +309,14 @@ function readStoredLocale() {
 
 function t(key) {
   return copy[locale][key] || key;
+}
+
+function interpolate(key, values) {
+  let value = t(key);
+  for (const [name, replacement] of Object.entries(values)) {
+    value = value.replaceAll(`{${name}}`, String(replacement));
+  }
+  return value;
 }
 
 function setLocale(nextLocale) {
@@ -313,6 +346,9 @@ function setLocale(nextLocale) {
   backupButton.setAttribute("aria-label", t("backup"));
   restoreButton.title = t("restore");
   restoreButton.setAttribute("aria-label", t("restore"));
+  deleteSelectedAccountsButton.title = t("batchDelete");
+  deleteSelectedAccountsButton.setAttribute("aria-label", t("batchDelete"));
+  keyBatchToolbar.setAttribute("aria-label", t("batchToolbar"));
   if (accountSearch) accountSearch.placeholder = t("searchPlaceholder");
   renderAccounts();
 }
@@ -357,7 +393,7 @@ function saveAutoRefreshSetting() {
 function scheduleAutoRefresh() {
   if (autoRefreshTimer) window.clearTimeout(autoRefreshTimer);
   autoRefreshTimer = null;
-  if (!autoRefreshEnabled.checked) return;
+  if (!autoRefreshEnabled.checked || batchDeleting) return;
   autoRefreshTimer = window.setTimeout(async () => {
     await loadAccountUsages(true);
     scheduleAutoRefresh();
@@ -407,6 +443,15 @@ function clearError() {
   errorBanner.hidden = true;
   editError.hidden = true;
   editError.textContent = "";
+}
+
+function showBatchPartial(successCount, failedCount) {
+  errorTitle.textContent = t("batchPartialTitle");
+  errorMessage.textContent = interpolate("batchPartialResult", {
+    success: successCount,
+    failed: failedCount,
+  });
+  errorBanner.hidden = false;
 }
 
 async function api(path, options = {}) {
@@ -703,10 +748,50 @@ function updateKeySummary() {
   }
 }
 
+function pruneSelectedAccounts() {
+  const editableIds = new Set(accounts.filter((account) => account.editable).map((account) => account.id));
+  for (const accountId of selectedAccountIds) {
+    if (!editableIds.has(accountId)) selectedAccountIds.delete(accountId);
+  }
+}
+
+function updateBatchSelectionControls(visibleAccounts) {
+  const selectableAccounts = visibleAccounts.filter((account) => account.editable);
+  const selectedVisibleCount = selectableAccounts.filter((account) => selectedAccountIds.has(account.id)).length;
+  const selectedCount = selectedAccountIds.size;
+  const selectionLocked = busy || batchDeleting;
+
+  selectVisibleAccounts.checked = selectableAccounts.length > 0 && selectedVisibleCount === selectableAccounts.length;
+  selectVisibleAccounts.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < selectableAccounts.length;
+  selectVisibleAccounts.disabled = selectionLocked || selectableAccounts.length === 0;
+  selectedAccountCount.textContent = interpolate("selectedSummary", {
+    count: selectedCount,
+    visible: selectedVisibleCount,
+  });
+  deleteSelectedAccountsButton.textContent = batchDeleting
+    ? interpolate("batchDeleting", { count: batchDeleteCount })
+    : t("batchDelete");
+  deleteSelectedAccountsButton.disabled = selectionLocked || selectedCount === 0;
+  deleteSelectedAccountsButton.classList.toggle("is-loading", batchDeleting);
+}
+
+function toggleVisibleAccountSelection() {
+  if (busy || batchDeleting) return;
+  const selectableAccounts = accounts.filter(accountMatchesFilter).filter((account) => account.editable);
+  if (selectVisibleAccounts.checked) {
+    for (const account of selectableAccounts) selectedAccountIds.add(account.id);
+  } else {
+    for (const account of selectableAccounts) selectedAccountIds.delete(account.id);
+  }
+  renderAccounts();
+}
+
 function renderAccounts() {
   accountList.replaceChildren();
   updateKeySummary();
+  pruneSelectedAccounts();
   const visibleAccounts = accounts.filter(accountMatchesFilter);
+  updateBatchSelectionControls(visibleAccounts);
   accountCount.textContent = locale === "zh"
     ? `${t("accountCount")}：${accounts.length}`
     : `${t("accountCount")}: ${accounts.length}`;
@@ -726,6 +811,28 @@ function renderAccounts() {
     row.dataset.lifecycle = lifecycleState;
     row.dataset.source = account.source || "stored";
     row.dataset.accountId = account.id;
+    row.classList.toggle("is-selected", selectedAccountIds.has(account.id));
+
+    if (account.editable) {
+      const selector = document.createElement("label");
+      selector.className = "account-selector";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = selectedAccountIds.has(account.id);
+      checkbox.disabled = busy || batchDeleting;
+      checkbox.setAttribute("aria-label", interpolate("selectAccount", { label: account.label }));
+      const selectorCopy = document.createElement("span");
+      selectorCopy.className = "sr-only";
+      selectorCopy.textContent = interpolate("selectAccount", { label: account.label });
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) selectedAccountIds.add(account.id);
+        else selectedAccountIds.delete(account.id);
+        row.classList.toggle("is-selected", checkbox.checked);
+        updateBatchSelectionControls(accounts.filter(accountMatchesFilter));
+      });
+      selector.append(checkbox, selectorCopy);
+      row.append(selector);
+    }
 
     const identity = document.createElement("div");
     identity.className = "account-identity";
@@ -1047,6 +1154,73 @@ async function removeAccount(account) {
   await runMutation(() => api(`/api/admin/accounts/${encodeURIComponent(account.id)}`, { method: "DELETE" }));
 }
 
+async function removeSelectedAccounts() {
+  if (busy || batchDeleting) return;
+  const selectedAccounts = accounts.filter((account) => account.editable && selectedAccountIds.has(account.id));
+  if (selectedAccounts.length === 0) {
+    renderAccounts();
+    return;
+  }
+  if (!window.confirm(interpolate("batchConfirm", { count: selectedAccounts.length }))) return;
+
+  busy = true;
+  batchDeleting = true;
+  batchDeleteCount = selectedAccounts.length;
+  addButton.disabled = true;
+  refreshAllButton.disabled = true;
+  backupButton.disabled = true;
+  restoreButton.disabled = true;
+  clearError();
+  if (autoRefreshTimer) window.clearTimeout(autoRefreshTimer);
+  autoRefreshTimer = null;
+  renderAccounts();
+
+  const deletedIds = new Set();
+  const failures = [];
+  try {
+    if (usageLoadPromise) await usageLoadPromise.catch(() => {});
+    let nextIndex = 0;
+    async function deleteWorker() {
+      while (nextIndex < selectedAccounts.length) {
+        const account = selectedAccounts[nextIndex];
+        nextIndex += 1;
+        try {
+          await api(`/api/admin/accounts/${encodeURIComponent(account.id)}`, { method: "DELETE" });
+          deletedIds.add(account.id);
+        } catch (error) {
+          failures.push({ account, error });
+        }
+      }
+    }
+    await Promise.all(Array.from(
+      { length: Math.min(3, selectedAccounts.length) },
+      () => deleteWorker(),
+    ));
+
+    for (const accountId of deletedIds) selectedAccountIds.delete(accountId);
+    accounts = accounts.filter((account) => !deletedIds.has(account.id));
+
+    try {
+      const payload = await api("/api/admin/accounts");
+      accounts = payload.accounts;
+      await loadAccountUsages(false);
+      if (failures.length > 0) showBatchPartial(deletedIds.size, failures.length);
+    } catch (error) {
+      showError(error);
+    }
+  } finally {
+    batchDeleting = false;
+    batchDeleteCount = 0;
+    busy = false;
+    addButton.disabled = false;
+    refreshAllButton.disabled = false;
+    backupButton.disabled = false;
+    restoreButton.disabled = false;
+    renderAccounts();
+    scheduleAutoRefresh();
+  }
+}
+
 addForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(addForm);
@@ -1122,6 +1296,8 @@ restoreInput.addEventListener("change", async () => {
   restoreInput.value = "";
   await restoreAccounts(file);
 });
+selectVisibleAccounts.addEventListener("change", toggleVisibleAccountSelection);
+deleteSelectedAccountsButton.addEventListener("click", removeSelectedAccounts);
 autoRefreshForm.addEventListener("submit", (event) => event.preventDefault());
 autoRefreshEnabled.addEventListener("change", applyAutoRefreshSetting);
 autoRefreshValue.addEventListener("change", applyAutoRefreshSetting);
