@@ -3,11 +3,20 @@ import test from "node:test";
 import { isAuthorized } from "../worker/auth.js";
 import { decryptApiKey, encryptApiKey, fingerprintApiKey } from "../worker/crypto.js";
 import { WorkerError } from "../worker/errors.js";
+import { cacheControlForAssetPath } from "../worker/index.js";
 import { sessionClaims, sessionCookie } from "../worker/session.js";
 import { hashUserPassword, verifyUserPassword } from "../worker/user-store.js";
 import { listModels, normalizeUsage, testModel } from "../worker/upstream.js";
 
 const MASTER_SECRET = "worker-test-secret-with-more-than-32-characters";
+
+test("Worker prevents stale document shells while retaining versioned asset caching", () => {
+  for (const pathname of ["/", "/admin", "/users", "/profile", "/login", "/admin.html"]) {
+    assert.equal(cacheControlForAssetPath(pathname), "no-store");
+  }
+  assert.equal(cacheControlForAssetPath("/admin.js"), "public, max-age=3600");
+  assert.equal(cacheControlForAssetPath("/styles.css"), "public, max-age=3600");
+});
 
 test("Worker encryption round-trips keys without storing plaintext", async () => {
   const key = "sk-opencode-worker-secret-1234";

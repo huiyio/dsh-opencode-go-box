@@ -328,8 +328,16 @@ async function serveAsset(request, env, url) {
   }));
   const securedHeaders = new Headers(response.headers);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) securedHeaders.set(name, value);
-  securedHeaders.set("Cache-Control", assetUrl.pathname.endsWith(".html") ? "no-cache" : "public, max-age=3600");
+  securedHeaders.set("Cache-Control", cacheControlForAssetPath(assetUrl.pathname));
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers: securedHeaders });
+}
+
+const DOCUMENT_PATHS = new Set(["/", "/admin", "/users", "/profile", "/login"]);
+
+export function cacheControlForAssetPath(pathname) {
+  return DOCUMENT_PATHS.has(pathname) || pathname.endsWith(".html")
+    ? "no-store"
+    : "public, max-age=3600";
 }
 
 export default {

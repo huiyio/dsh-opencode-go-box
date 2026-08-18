@@ -674,11 +674,16 @@ function updateKeySummary() {
   const risk = accounts.filter(accountHasRisk).length;
   const attention = accounts.filter((account) => lifecycleStateFor(account) !== "active").length;
   const tested = [...testResults.values()].filter(testCompleted).length;
-  keySummaryTotal.textContent = String(accounts.length);
-  keySummaryActive.textContent = String(active);
-  keySummaryRisk.textContent = String(risk);
-  keySummaryAttention.textContent = String(attention);
-  keySummaryTested.textContent = String(tested);
+  const summaryValues = [
+    [keySummaryTotal, accounts.length],
+    [keySummaryActive, active],
+    [keySummaryRisk, risk],
+    [keySummaryAttention, attention],
+    [keySummaryTested, tested],
+  ];
+  for (const [element, value] of summaryValues) {
+    if (element) element.textContent = String(value);
+  }
 }
 
 function renderAccounts() {

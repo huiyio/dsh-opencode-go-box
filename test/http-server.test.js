@@ -87,7 +87,7 @@ test("HTTP server exposes health while protecting the dashboard and API", async 
   const page = await fetch(`${baseUrl}/`, { headers });
   assert.equal(page.status, 200);
   assert.match(page.headers.get("content-security-policy"), /default-src 'self'/);
-  assert.equal(page.headers.get("cache-control"), "no-cache");
+  assert.equal(page.headers.get("cache-control"), "no-store");
   assert.match(await page.text(), /OpenCode Go/);
 
   const accounts = await fetch(`${baseUrl}/api/accounts`, { headers });

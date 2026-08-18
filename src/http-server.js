@@ -138,10 +138,11 @@ async function principalFromRequest(request, config, userStore) {
 async function sendStatic(response, publicDir, filename, headOnly) {
   try {
     const payload = await readFile(join(publicDir, filename));
+    const extension = extname(filename);
     response.writeHead(200, {
       ...securityHeaders(),
-      "Cache-Control": "no-cache",
-      "Content-Type": CONTENT_TYPES.get(extname(filename)) || "application/octet-stream",
+      "Cache-Control": extension === ".html" ? "no-store" : "no-cache",
+      "Content-Type": CONTENT_TYPES.get(extension) || "application/octet-stream",
       "Content-Length": payload.length,
     });
     response.end(headOnly ? undefined : payload);
