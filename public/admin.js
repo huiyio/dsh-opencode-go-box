@@ -93,12 +93,14 @@ const copy = {
     selectVisible: "全选当前结果",
     batchToolbar: "Key 批量操作",
     selectAccount: "选择账号 {label}",
-    selectedSummary: "已选 {count} 项 · 当前可见 {visible} 项",
+    selectedSummary: "已选 {count} 项 · 当前结果已选 {visible} 项",
     batchDelete: "批量删除",
     batchDeleting: "正在删除 {count} 项",
-    batchConfirm: "确定永久删除选中的 {count} 个 Key？同时会撤销用户对这些 Key 的查看权限，此操作无法撤销。",
+    batchConfirm: "确定永久删除选中的 {count} 个 Key（当前结果内 {visible} 个）？同时会撤销用户对这些 Key 的查看权限，此操作无法撤销。",
     batchPartialTitle: "批量删除未完全完成",
     batchPartialResult: "成功删除 {success} 个，失败 {failed} 个。失败项已保留选择，可再次重试。",
+    batchSyncTitle: "批量删除结果待同步",
+    batchSyncResult: "已确认删除 {success} 个；另有 {uncertain} 个请求状态待确认。列表同步失败，请刷新页面核对。",
     usersTitle: "用户管理",
     usersSubtitle: "用户只能查看已授权的账号额度，未授权时看不到任何账号数据",
     username: "用户名",
@@ -208,12 +210,14 @@ const copy = {
     selectVisible: "Select current results",
     batchToolbar: "Key batch actions",
     selectAccount: "Select account {label}",
-    selectedSummary: "{count} selected · {visible} visible",
+    selectedSummary: "{count} selected · {visible} selected in current results",
     batchDelete: "Delete selected",
     batchDeleting: "Deleting {count}",
-    batchConfirm: "Permanently delete the selected {count} keys? User access to these keys will also be revoked. This cannot be undone.",
+    batchConfirm: "Permanently delete the selected {count} keys ({visible} in the current results)? User access to these keys will also be revoked. This cannot be undone.",
     batchPartialTitle: "Batch deletion incomplete",
     batchPartialResult: "Deleted {success}; {failed} failed. Failed items remain selected so you can retry.",
+    batchSyncTitle: "Batch deletion needs verification",
+    batchSyncResult: "Confirmed {success} deleted; {uncertain} requests still have an unknown result. The list could not be synchronized, so refresh the page to verify.",
     usersTitle: "User management",
     usersSubtitle: "Users can only view assigned accounts; unassigned users receive no account data",
     username: "Username",
@@ -450,6 +454,15 @@ function showBatchPartial(successCount, failedCount) {
   errorMessage.textContent = interpolate("batchPartialResult", {
     success: successCount,
     failed: failedCount,
+  });
+  errorBanner.hidden = false;
+}
+
+function showBatchSyncFailure(successCount, uncertainCount) {
+  errorTitle.textContent = t("batchSyncTitle");
+  errorMessage.textContent = interpolate("batchSyncResult", {
+    success: successCount,
+    uncertain: uncertainCount,
   });
   errorBanner.hidden = false;
 }
@@ -1161,7 +1174,11 @@ async function removeSelectedAccounts() {
     renderAccounts();
     return;
   }
-  if (!window.confirm(interpolate("batchConfirm", { count: selectedAccounts.length }))) return;
+  const selectedVisibleCount = selectedAccounts.filter(accountMatchesFilter).length;
+  if (!window.confirm(interpolate("batchConfirm", {
+    count: selectedAccounts.length,
+    visible: selectedVisibleCount,
+  }))) return;
 
   busy = true;
   batchDeleting = true;
@@ -1176,7 +1193,7 @@ async function removeSelectedAccounts() {
   renderAccounts();
 
   const deletedIds = new Set();
-  const failures = [];
+  const uncertainIds = new Set();
   try {
     if (usageLoadPromise) await usageLoadPromise.catch(() => {});
     let nextIndex = 0;
@@ -1187,8 +1204,8 @@ async function removeSelectedAccounts() {
         try {
           await api(`/api/admin/accounts/${encodeURIComponent(account.id)}`, { method: "DELETE" });
           deletedIds.add(account.id);
-        } catch (error) {
-          failures.push({ account, error });
+        } catch {
+          uncertainIds.add(account.id);
         }
       }
     }
@@ -1203,10 +1220,21 @@ async function removeSelectedAccounts() {
     try {
       const payload = await api("/api/admin/accounts");
       accounts = payload.accounts;
-      await loadAccountUsages(false);
-      if (failures.length > 0) showBatchPartial(deletedIds.size, failures.length);
-    } catch (error) {
-      showError(error);
+      const remainingIds = new Set(accounts.map((account) => account.id));
+      const failedIds = new Set(selectedAccounts
+        .filter((account) => remainingIds.has(account.id))
+        .map((account) => account.id));
+      const successfulIds = selectedAccounts
+        .filter((account) => !failedIds.has(account.id))
+        .map((account) => account.id);
+      for (const accountId of successfulIds) selectedAccountIds.delete(accountId);
+      for (const accountId of failedIds) selectedAccountIds.add(accountId);
+      await loadAccountUsages(false).catch(() => {
+        renderAccounts();
+      });
+      if (failedIds.size > 0) showBatchPartial(successfulIds.length, failedIds.size);
+    } catch {
+      showBatchSyncFailure(deletedIds.size, uncertainIds.size);
     }
   } finally {
     batchDeleting = false;
