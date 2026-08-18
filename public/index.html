@@ -4,51 +4,110 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
-    <meta name="theme-color" content="#f4f6f5">
-    <title>OpenCode Go 额度</title>
-    <link rel="stylesheet" href="/styles.css?v=console-4">
+    <meta name="theme-color" content="#f3f1eb">
+    <title>OpenCode Go 额度观测</title>
+    <link rel="stylesheet" href="/styles.css?v=console-5">
   </head>
   <body data-page="dashboard">
     <div class="console-shell">
       <aside class="console-sidebar" aria-label="主导航">
         <a class="brand" href="/" aria-label="OpenCode Go">
-          <span class="brand-mark" aria-hidden="true">GO</span>
-          <span class="brand-copy"><strong>OpenCode Go</strong><small>额度工作台</small></span>
+          <span class="brand-mark" aria-hidden="true"><b>GO</b><small>Q</small></span>
+          <span class="brand-copy"><strong>OpenCode Go</strong><small>额度观测台</small></span>
         </a>
         <nav class="primary-nav">
-          <a href="/" data-nav="dashboard"><span>额度看板</span><small>账号用量</small></a>
-          <a id="admin-link" href="/admin" data-nav="keys" data-admin-link hidden><span data-copy="manageKeys">Key 管理</span><small>账号与额度</small></a>
-          <a href="/users" data-nav="users" data-admin-link hidden><span>用户与权限</span><small>访问控制</small></a>
-          <a href="/profile" data-nav="profile"><span data-copy="profile">个人设置</span><small>账号安全</small></a>
+          <a href="/" data-nav="dashboard"><span>额度观测</span><small>5H / 7D / 30D</small></a>
+          <a id="admin-link" href="/admin" data-nav="keys" data-admin-link hidden><span data-copy="manageKeys">Key 管理</span><small>资产与生命周期</small></a>
+          <a href="/users" data-nav="users" data-admin-link hidden><span>访问授权</span><small>用户与查看范围</small></a>
+          <a href="/profile" data-nav="profile"><span data-copy="profile">账户安全</span><small>登录凭据</small></a>
         </nav>
-        <div class="sidebar-note"><span class="sidebar-note-label">数据服务</span><strong>OpenCode Go</strong><span>受登录权限保护</span></div>
+        <div class="sidebar-note"><span class="sidebar-note-label">QUOTA SERVICE</span><strong>三周期实时观测</strong><span>上游使用量换算为剩余比例</span></div>
       </aside>
+
       <div class="console-content">
         <header class="global-bar">
-          <a class="mobile-brand" href="/" aria-label="OpenCode Go"><span class="brand-mark" aria-hidden="true">GO</span><span>OpenCode Go</span></a>
+          <a class="mobile-brand" href="/" aria-label="OpenCode Go"><span class="brand-mark" aria-hidden="true"><b>GO</b><small>Q</small></span><span>OpenCode Go</span></a>
           <div class="global-actions">
             <div class="language-switch" role="group" aria-label="Language"><button type="button" data-locale="zh" aria-pressed="true">中文</button><button type="button" data-locale="en" aria-pressed="false">EN</button></div>
-            <a id="profile-link" class="text-command" href="/profile" title="个人设置" aria-label="个人设置"><span data-copy="profile">个人设置</span></a>
+            <a id="profile-link" class="text-command" href="/profile" title="账户安全" aria-label="账户安全"><span data-copy="profile">账户安全</span></a>
             <button id="logout-button" class="text-command" type="button" title="退出登录" aria-label="退出登录"><span data-copy="logout">退出登录</span></button>
           </div>
         </header>
-        <nav class="compact-nav" aria-label="主导航"><a href="/" data-nav="dashboard">额度看板</a><a href="/admin" data-nav="keys" data-admin-link hidden>Key 管理</a><a href="/users" data-nav="users" data-admin-link hidden>用户与权限</a><a href="/profile" data-nav="profile">个人设置</a></nav>
+        <nav class="compact-nav" aria-label="主导航"><a href="/" data-nav="dashboard">额度观测</a><a href="/admin" data-nav="keys" data-admin-link hidden>Key 资产</a><a href="/users" data-nav="users" data-admin-link hidden>访问授权</a><a href="/profile" data-nav="profile">账户安全</a></nav>
+
         <main class="workspace dashboard-workspace">
           <section class="page-header dashboard-header" aria-labelledby="page-title">
-            <div><p class="eyebrow" data-copy="eyebrow">实时额度</p><h1 id="page-title" data-copy="title">使用情况</h1><p class="page-description">按账号查看 OpenCode Go 的当前额度和重置时间。</p></div>
+            <div class="header-copy"><p class="eyebrow"><span class="eyebrow-code">GO / QUOTA</span><span data-copy="eyebrow">实时额度</span></p><h1 id="page-title" data-copy="title">额度观测</h1><p class="page-description">聚焦剩余比例、已用量和下次重置时间，三个周期按 OpenCode Go 上游口径独立计算。</p></div>
             <div class="sync-state" aria-live="polite"><span id="status-dot" class="status-dot is-loading" aria-hidden="true"></span><div><strong id="status-label" data-copy="loading">正在读取</strong><span id="updated-at">--</span></div></div>
           </section>
-          <section class="account-context" aria-label="账号选择"><div class="context-label"><span>当前查看</span><strong data-copy="account">账号</strong></div><label class="sr-only" for="account-select" data-copy="account">账号</label><select id="account-select" disabled></select><code id="account-key">--</code><button id="refresh-button" class="command-button secondary" type="button" title="刷新" aria-label="刷新"><span data-copy="refresh">刷新</span></button></section>
+
+          <section class="account-context" aria-label="账号观测上下文">
+            <div class="context-label"><span>OBSERVING</span><strong data-copy="account">当前账号</strong></div>
+            <label class="sr-only" for="account-select" data-copy="account">账号</label>
+            <select id="account-select" disabled></select>
+            <code id="account-key">--</code>
+            <button id="refresh-button" class="command-button secondary" type="button" title="刷新" aria-label="刷新"><span data-copy="refresh">立即刷新</span></button>
+          </section>
+
           <section id="error-banner" class="error-banner" role="alert" hidden><strong id="error-title"></strong><span id="error-message"></span></section>
-          <section class="quota-grid" aria-label="额度周期">
-            <article class="quota-card" data-window="rolling"><div class="card-heading"><div><p class="window-kicker" data-copy="rollingPeriod">5小时</p><h2 data-copy="rolling">5 小时滚动</h2></div><span class="window-status" data-role="window-status">--</span></div><div class="balance-line"><strong data-role="remaining">--</strong><span data-copy="remaining">剩余</span></div><div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span data-role="progress"></span></div><div class="card-meta"><span><span data-copy="used">已使用</span><b data-role="used">--</b></span><span><span data-copy="reset">重置</span><b data-role="countdown">--</b></span></div><time data-role="reset-at">--</time></article>
-            <article class="quota-card" data-window="weekly"><div class="card-heading"><div><p class="window-kicker" data-copy="weeklyPeriod">7天</p><h2 data-copy="weekly">每周</h2></div><span class="window-status" data-role="window-status">--</span></div><div class="balance-line"><strong data-role="remaining">--</strong><span data-copy="remaining">剩余</span></div><div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span data-role="progress"></span></div><div class="card-meta"><span><span data-copy="used">已使用</span><b data-role="used">--</b></span><span><span data-copy="reset">重置</span><b data-role="countdown">--</b></span></div><time data-role="reset-at">--</time></article>
-            <article class="quota-card" data-window="monthly"><div class="card-heading"><div><p class="window-kicker" data-copy="monthlyPeriod">30天</p><h2 data-copy="monthly">每月</h2></div><span class="window-status" data-role="window-status">--</span></div><div class="balance-line"><strong data-role="remaining">--</strong><span data-copy="remaining">剩余</span></div><div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span data-role="progress"></span></div><div class="card-meta"><span><span data-copy="used">已使用</span><b data-role="used">--</b></span><span><span data-copy="reset">重置</span><b data-role="countdown">--</b></span></div><time data-role="reset-at">--</time></article>
+
+          <section class="telemetry-strip" aria-label="额度风险摘要">
+            <article><span class="telemetry-label">最低余量</span><strong id="overall-remaining">--</strong><small id="overall-window">等待数据</small></article>
+            <article><span class="telemetry-label">最近重置</span><strong id="overall-reset">--</strong><small>按上游 resetsAt</small></article>
+            <article><span class="telemetry-label">数据模式</span><strong id="cache-label">--</strong><small>实时请求或短时缓存</small></article>
+            <article class="telemetry-definition"><span class="telemetry-label">显示口径</span><strong>剩余 = 100 - 已用</strong><small>百分比不是货币余额</small></article>
+          </section>
+
+          <section class="quota-section" aria-labelledby="quota-section-title">
+            <header class="section-header"><div><p class="section-code">WINDOWS / 01-03</p><h2 id="quota-section-title">额度周期轨道</h2></div><p>轨道长度表示已用量；主数字始终表示剩余比例。</p></header>
+            <div class="quota-grid" aria-label="额度周期">
+              <article class="quota-card" data-window="rolling">
+                <div class="window-rail" aria-hidden="true"><strong>5H</strong><span>01</span></div>
+                <div class="quota-card-content">
+                  <div class="card-heading"><div><p class="window-kicker" data-copy="rollingPeriod">5小时</p><h2 data-copy="rolling">5 小时滚动</h2><p class="window-note">即时压力窗口，按最近使用动态滚动</p></div><span class="window-status" data-role="window-status">--</span></div>
+                  <div class="meter-heading"><span data-copy="used">已使用</span><b data-role="used">--</b></div>
+                  <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span data-role="progress"></span></div>
+                  <div class="meter-scale" aria-hidden="true"><span>0</span><span>50</span><span>100</span></div>
+                </div>
+                <div class="lane-values"><div class="balance-line"><strong data-role="remaining">--</strong><span data-copy="remaining">剩余</span></div><div class="card-meta"><span><span data-copy="reset">距离重置</span><b data-role="countdown">--</b></span><time data-role="reset-at">--</time></div></div>
+              </article>
+
+              <article class="quota-card" data-window="weekly">
+                <div class="window-rail" aria-hidden="true"><strong>7D</strong><span>02</span></div>
+                <div class="quota-card-content">
+                  <div class="card-heading"><div><p class="window-kicker" data-copy="weeklyPeriod">7天</p><h2 data-copy="weekly">每周</h2><p class="window-note">周周期窗口，观察持续调用压力</p></div><span class="window-status" data-role="window-status">--</span></div>
+                  <div class="meter-heading"><span data-copy="used">已使用</span><b data-role="used">--</b></div>
+                  <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span data-role="progress"></span></div>
+                  <div class="meter-scale" aria-hidden="true"><span>0</span><span>50</span><span>100</span></div>
+                </div>
+                <div class="lane-values"><div class="balance-line"><strong data-role="remaining">--</strong><span data-copy="remaining">剩余</span></div><div class="card-meta"><span><span data-copy="reset">距离重置</span><b data-role="countdown">--</b></span><time data-role="reset-at">--</time></div></div>
+              </article>
+
+              <article class="quota-card" data-window="monthly">
+                <div class="window-rail" aria-hidden="true"><strong>30D</strong><span>03</span></div>
+                <div class="quota-card-content">
+                  <div class="card-heading"><div><p class="window-kicker" data-copy="monthlyPeriod">30天</p><h2 data-copy="monthly">每月</h2><p class="window-note">长期周期窗口，衡量整月使用余量</p></div><span class="window-status" data-role="window-status">--</span></div>
+                  <div class="meter-heading"><span data-copy="used">已使用</span><b data-role="used">--</b></div>
+                  <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span data-role="progress"></span></div>
+                  <div class="meter-scale" aria-hidden="true"><span>0</span><span>50</span><span>100</span></div>
+                </div>
+                <div class="lane-values"><div class="balance-line"><strong data-role="remaining">--</strong><span data-copy="remaining">剩余</span></div><div class="card-meta"><span><span data-copy="reset">距离重置</span><b data-role="countdown">--</b></span><time data-role="reset-at">--</time></div></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="reset-schedule" aria-labelledby="reset-schedule-title">
+            <header class="section-header"><div><p class="section-code">RESET / SEQUENCE</p><h2 id="reset-schedule-title">下一次额度恢复</h2></div><p>按上游返回的重置时间排序，倒计时会在页面内持续更新。</p></header>
+            <div class="reset-nodes">
+              <article class="reset-node" data-reset-window="rolling"><span class="reset-node-code">5H</span><div><strong data-role="reset-countdown">--</strong><time data-role="reset-time">--</time></div><span data-role="reset-order">01</span></article>
+              <article class="reset-node" data-reset-window="weekly"><span class="reset-node-code">7D</span><div><strong data-role="reset-countdown">--</strong><time data-role="reset-time">--</time></div><span data-role="reset-order">02</span></article>
+              <article class="reset-node" data-reset-window="monthly"><span class="reset-node-code">30D</span><div><strong data-role="reset-countdown">--</strong><time data-role="reset-time">--</time></div><span data-role="reset-order">03</span></article>
+            </div>
           </section>
         </main>
-        <footer><span>OpenCode Go 额度工作台</span><span id="cache-label"></span></footer>
+        <footer><span>OpenCode Go 额度观测台</span><span>重置时间来自上游接口</span></footer>
       </div>
     </div>
-    <script type="module" src="/app.js?v=console-4"></script>
+    <script type="module" src="/app.js?v=console-5"></script>
   </body>
 </html>

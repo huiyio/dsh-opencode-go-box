@@ -1,7 +1,7 @@
 const copy = {
   zh: {
     eyebrow: "实时额度",
-    title: "使用情况",
+    title: "额度观测",
     loading: "正在读取",
     current: "数据正常",
     failed: "读取失败",
@@ -14,7 +14,11 @@ const copy = {
     remaining: "剩余",
     used: "已使用",
     reset: "重置",
-    ready: "正常",
+    ready: "实时可用",
+    cachedWindow: "缓存数据",
+    low: "余量偏低",
+    critical: "即将耗尽",
+    depleted: "已耗尽",
     unknown: "暂无数据",
     cached: "缓存数据",
     live: "实时数据",
@@ -28,14 +32,14 @@ const copy = {
     justNow: "刚刚",
     days: "天",
     account: "账号",
-    manageKeys: "Key 管理",
-    profile: "个人设置",
+    manageKeys: "Key 资产",
+    profile: "账户安全",
     logout: "退出登录",
     noAccounts: "暂未授权任何账号。",
   },
   en: {
     eyebrow: "Live quota",
-    title: "Usage overview",
+    title: "Quota observatory",
     loading: "Loading",
     current: "Up to date",
     failed: "Unavailable",
@@ -48,7 +52,11 @@ const copy = {
     remaining: "remaining",
     used: "Used",
     reset: "Resets",
-    ready: "Available",
+    ready: "Live",
+    cachedWindow: "Cached",
+    low: "Low quota",
+    critical: "Nearly depleted",
+    depleted: "Depleted",
     unknown: "No data",
     cached: "Cached data",
     live: "Live data",
@@ -62,8 +70,8 @@ const copy = {
     justNow: "just now",
     days: "d",
     account: "Account",
-    manageKeys: "Manage keys",
-    profile: "Profile",
+    manageKeys: "Key assets",
+    profile: "Account security",
     logout: "Sign out",
     noAccounts: "No accounts have been assigned to you.",
   },
@@ -71,6 +79,9 @@ const copy = {
 
 const cards = new Map(
   [...document.querySelectorAll("[data-window]")].map((element) => [element.dataset.window, element]),
+);
+const resetNodes = new Map(
+  [...document.querySelectorAll("[data-reset-window]")].map((element) => [element.dataset.resetWindow, element]),
 );
 const refreshButton = document.querySelector("#refresh-button");
 const statusDot = document.querySelector("#status-dot");
@@ -85,6 +96,9 @@ const accountKey = document.querySelector("#account-key");
 const adminLink = document.querySelector("#admin-link");
 const adminLinks = document.querySelectorAll("[data-admin-link]");
 const logoutButton = document.querySelector("#logout-button");
+const overallRemaining = document.querySelector("#overall-remaining");
+const overallWindow = document.querySelector("#overall-window");
+const overallReset = document.querySelector("#overall-reset");
 
 function storedLocale() {
   try {
@@ -107,7 +121,7 @@ function t(key) {
 function setLocale(nextLocale) {
   locale = nextLocale === "en" ? "en" : "zh";
   document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
-  document.title = locale === "zh" ? "OpenCode Go 额度" : "OpenCode Go quota";
+  document.title = locale === "zh" ? "OpenCode Go 额度观测" : "OpenCode Go quota observatory";
   try {
     localStorage.setItem("opencode-go-locale", locale);
   } catch {
@@ -166,7 +180,7 @@ function cardLevel(percent, thresholds) {
   return "ok";
 }
 
-function renderCard(card, value, thresholds) {
+function renderCard(card, value, thresholds, cached) {
   const remaining = card.querySelector('[data-role="remaining"]');
   const used = card.querySelector('[data-role="used"]');
   const progress = card.querySelector('[data-role="progress"]');
@@ -179,6 +193,8 @@ function renderCard(card, value, thresholds) {
   const level = cardLevel(percent, thresholds);
   card.classList.toggle("is-warn", level === "warn");
   card.classList.toggle("is-danger", level === "danger");
+  card.classList.toggle("is-depleted", typeof value?.remainingPercent === "number" && value.remainingPercent <= 0);
+  card.dataset.level = !value ? "unknown" : typeof value.remainingPercent === "number" && value.remainingPercent <= 0 ? "depleted" : level;
   remaining.textContent = formatPercent(value?.remainingPercent);
   used.textContent = formatPercent(percent);
   progress.style.width = `${typeof percent === "number" ? percent : 0}%`;
@@ -186,16 +202,71 @@ function renderCard(card, value, thresholds) {
   countdown.textContent = formatCountdown(value?.resetsAt);
   resetAt.textContent = formatDate(value?.resetsAt);
   resetAt.dateTime = value?.resetsAt || "";
-  windowStatus.textContent = value ? t("ready") : t("unknown");
+  if (!value) {
+    windowStatus.textContent = t("unknown");
+  } else if (typeof value.remainingPercent === "number" && value.remainingPercent <= 0) {
+    windowStatus.textContent = t("depleted");
+  } else if (level === "danger") {
+    windowStatus.textContent = t("critical");
+  } else if (level === "warn") {
+    windowStatus.textContent = t("low");
+  } else {
+    windowStatus.textContent = cached ? t("cachedWindow") : t("ready");
+  }
+}
+
+function renderResetSchedule(payload) {
+  const scheduled = [...resetNodes.entries()].map(([name, node]) => {
+    const resetsAt = payload.usage?.[name]?.resetsAt || null;
+    const timestamp = resetsAt ? new Date(resetsAt).getTime() : Number.POSITIVE_INFINITY;
+    return { name, node, resetsAt, timestamp: Number.isFinite(timestamp) ? timestamp : Number.POSITIVE_INFINITY };
+  }).sort((left, right) => left.timestamp - right.timestamp);
+
+  scheduled.forEach((item, index) => {
+    item.node.style.order = String(index + 1);
+    item.node.querySelector('[data-role="reset-countdown"]').textContent = formatCountdown(item.resetsAt);
+    const time = item.node.querySelector('[data-role="reset-time"]');
+    time.textContent = formatDate(item.resetsAt);
+    time.dateTime = item.resetsAt || "";
+    item.node.querySelector('[data-role="reset-order"]').textContent = String(index + 1).padStart(2, "0");
+    item.node.classList.toggle("is-unknown", !item.resetsAt);
+  });
 }
 
 function render(payload) {
   latestPayload = payload;
   const thresholds = payload.thresholds || { warn: 60, danger: 85 };
-  for (const [name, card] of cards) renderCard(card, payload.usage?.[name], thresholds);
+  for (const [name, card] of cards) renderCard(card, payload.usage?.[name], thresholds, Boolean(payload.cached));
+
+  const windowLabels = {
+    rolling: t("rollingPeriod"),
+    weekly: t("weeklyPeriod"),
+    monthly: t("monthlyPeriod"),
+  };
+  const observations = Object.entries(payload.usage || {})
+    .filter(([, value]) => typeof value?.remainingPercent === "number")
+    .map(([name, value]) => ({ name, ...value }));
+  const tightest = observations.reduce((current, value) => (
+    !current || value.remainingPercent < current.remainingPercent ? value : current
+  ), null);
+  const nextReset = observations
+    .filter((value) => Number.isFinite(new Date(value.resetsAt).getTime()))
+    .sort((left, right) => new Date(left.resetsAt) - new Date(right.resetsAt))[0];
+  overallRemaining.textContent = tightest ? formatPercent(tightest.remainingPercent) : "--";
+  overallWindow.textContent = tightest ? `${windowLabels[tightest.name]} · ${t("remaining")}` : t("unknown");
+  overallReset.textContent = nextReset ? formatDate(nextReset.resetsAt) : "--";
+  const tightestSummary = overallRemaining.closest("article");
+  if (tightestSummary) {
+    tightestSummary.dataset.level = !tightest
+      ? "unknown"
+      : tightest.remainingPercent <= 0
+        ? "depleted"
+        : cardLevel(tightest.percent, thresholds);
+  }
+  renderResetSchedule(payload);
 
   statusDot.className = "status-dot";
-  statusLabel.textContent = t("current");
+  statusLabel.textContent = payload.cached ? t("cached") : t("current");
   updatedAt.textContent = formatDate(payload.fetchedAt);
   cacheLabel.textContent = payload.cached ? t("cached") : t("live");
   errorBanner.hidden = true;
@@ -206,6 +277,10 @@ function updateCountdowns() {
   for (const [name, card] of cards) {
     const value = latestPayload.usage?.[name];
     card.querySelector('[data-role="countdown"]').textContent = formatCountdown(value?.resetsAt);
+  }
+  for (const [name, node] of resetNodes) {
+    const value = latestPayload.usage?.[name];
+    node.querySelector('[data-role="reset-countdown"]').textContent = formatCountdown(value?.resetsAt);
   }
 }
 
@@ -224,7 +299,17 @@ function showError(error) {
   errorTitle.textContent = t("errorTitle");
   errorMessage.textContent = translatedError(error?.code);
   errorBanner.hidden = false;
-  cacheLabel.textContent = "";
+  cacheLabel.textContent = "--";
+  overallRemaining.textContent = "--";
+  overallWindow.textContent = t("unknown");
+  overallReset.textContent = "--";
+  for (const node of resetNodes.values()) {
+    node.classList.add("is-unknown");
+    node.querySelector('[data-role="reset-countdown"]').textContent = "--";
+    const time = node.querySelector('[data-role="reset-time"]');
+    time.textContent = "--";
+    time.dateTime = "";
+  }
 }
 
 function scheduleRefresh(intervalMs) {

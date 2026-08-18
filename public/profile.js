@@ -1,20 +1,20 @@
 const copy = {
   zh: {
-    logout: "退出登录", users: "用户管理", dashboard: "返回看板", eyebrow: "账户安全", title: "个人设置",
+    logout: "退出登录", users: "访问授权", dashboard: "额度观测", eyebrow: "账户安全", title: "账户安全",
     roleAdmin: "系统管理员", roleViewer: "普通用户", identity: "当前账号：{username} · {role}",
-    editTitle: "修改登录账号", username: "新用户名", currentPassword: "当前密码",
-    newPassword: "新密码（不修改可留空）", confirmPassword: "确认新密码", save: "保存账号和密码",
-    security: "安全设置", savedTitle: "修改成功", saved: "账号资料已更新，其他旧登录已失效。",
+    editTitle: "更换登录凭据", username: "新用户名", currentPassword: "当前密码",
+    newPassword: "新密码（不修改可留空）", confirmPassword: "确认新密码", save: "保存账户凭据",
+    security: "账户安全", credentialKicker: "登录凭据", savedTitle: "修改成功", saved: "账号资料已更新，其他旧登录已失效。",
     errorTitle: "修改失败", currentInvalid: "当前密码不正确。", mismatch: "两次输入的新密码不一致。",
     duplicate: "这个用户名已经存在。", invalid: "用户名应为 3-64 个无空格字符，密码应为 8-128 个字符。",
     generic: "暂时无法修改，请稍后重试。",
   },
   en: {
-    logout: "Sign out", users: "User management", dashboard: "Dashboard", eyebrow: "Account security", title: "Profile",
+    logout: "Sign out", users: "Access authorization", dashboard: "Quota view", eyebrow: "Account security", title: "Account security",
     roleAdmin: "Administrator", roleViewer: "Viewer", identity: "Current account: {username} · {role}",
-    editTitle: "Edit login account", username: "New username", currentPassword: "Current password",
-    newPassword: "New password (leave empty to keep current)", confirmPassword: "Confirm new password", save: "Save account and password",
-    security: "Security settings", savedTitle: "Updated", saved: "Your account was updated. Other existing sessions are now invalid.",
+    editTitle: "Rotate login credentials", username: "New username", currentPassword: "Current password",
+    newPassword: "New password (leave empty to keep current)", confirmPassword: "Confirm new password", save: "Save account credentials",
+    security: "Account security", credentialKicker: "Login credentials", savedTitle: "Updated", saved: "Your account was updated. Other existing sessions are now invalid.",
     errorTitle: "Update failed", currentInvalid: "The current password is incorrect.", mismatch: "The new passwords do not match.",
     duplicate: "This username already exists.", invalid: "Use a 3-64 character username without spaces and an 8-128 character password.",
     generic: "Unable to update the account right now. Try again later.",
@@ -54,7 +54,7 @@ function renderIdentity() {
 function setLocale(next) {
   locale = next === "en" ? "en" : "zh";
   document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
-  document.title = locale === "zh" ? "OpenCode Go 个人设置" : "OpenCode Go profile";
+  document.title = locale === "zh" ? "OpenCode Go 账户安全" : "OpenCode Go account security";
   localStorage.setItem("opencode-go-locale", locale);
   document.querySelectorAll("[data-copy]").forEach((element) => { element.textContent = t(element.dataset.copy); });
   document.querySelectorAll("[data-locale]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.locale === locale)));

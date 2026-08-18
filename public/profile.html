@@ -4,18 +4,66 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
-    <meta name="theme-color" content="#f4f6f5">
-    <title>OpenCode Go 个人设置</title>
-    <link rel="stylesheet" href="/styles.css?v=console-4">
+    <meta name="theme-color" content="#f3f1eb">
+    <title>OpenCode Go 账户安全</title>
+    <link rel="stylesheet" href="/styles.css?v=console-5">
   </head>
   <body data-page="profile">
     <div class="console-shell">
-      <aside class="console-sidebar" aria-label="主导航"><a class="brand" href="/" aria-label="OpenCode Go"><span class="brand-mark" aria-hidden="true">GO</span><span class="brand-copy"><strong>OpenCode Go</strong><small>额度工作台</small></span></a><nav class="primary-nav"><a href="/" data-nav="dashboard"><span>额度看板</span><small>账号用量</small></a><a href="/admin" data-nav="keys" data-admin-link><span>Key 管理</span><small>账号与额度</small></a><a id="users-link" href="/users" data-nav="users" data-admin-link><span data-copy="users">用户管理</span><small>访问控制</small></a><a href="/profile" data-nav="profile"><span>个人设置</span><small>账号安全</small></a></nav><div class="sidebar-note"><span class="sidebar-note-label">账户保护</span><strong>个人设置</strong><span>修改后旧会话失效</span></div></aside>
-      <div class="console-content"><header class="global-bar"><a class="mobile-brand" href="/" aria-label="OpenCode Go"><span class="brand-mark" aria-hidden="true">GO</span><span>OpenCode Go</span></a><div class="global-actions"><div class="language-switch" role="group" aria-label="Language"><button type="button" data-locale="zh" aria-pressed="true">中文</button><button type="button" data-locale="en" aria-pressed="false">EN</button></div><button id="logout-button" class="text-command" type="button" data-copy="logout">退出登录</button></div></header><nav class="compact-nav" aria-label="主导航"><a href="/" data-nav="dashboard">额度看板</a><a href="/admin" data-nav="keys" data-admin-link>Key 管理</a><a href="/users" data-nav="users" data-admin-link>用户与权限</a><a href="/profile" data-nav="profile">个人设置</a></nav>
-        <main class="workspace profile-workspace"><section class="page-header profile-header" aria-labelledby="profile-page-title"><div><p class="eyebrow" data-copy="eyebrow">账户安全</p><h1 id="profile-page-title" data-copy="title">个人设置</h1><p id="identity-summary" class="page-description">--</p></div></section><section id="profile-message" class="error-banner profile-message" role="status" hidden><strong id="profile-message-title"></strong><span id="profile-message-text"></span></section><section id="profile-editor" class="security-panel" hidden><header><div><p class="section-kicker">登录凭据</p><h2 data-copy="editTitle">修改登录账号</h2></div><span>修改成功后，其他旧登录会失效。</span></header><form id="profile-form" class="profile-form"><div class="field"><label for="profile-username" data-copy="username">新用户名</label><input id="profile-username" name="username" minlength="3" maxlength="64" autocomplete="username" required></div><div class="field"><label for="current-password" data-copy="currentPassword">当前密码</label><input id="current-password" name="currentPassword" type="password" minlength="8" maxlength="128" autocomplete="current-password" required></div><div class="field"><label for="new-password" data-copy="newPassword">新密码（不修改可留空）</label><input id="new-password" name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password"></div><div class="field"><label for="confirm-password" data-copy="confirmPassword">确认新密码</label><input id="confirm-password" name="confirmPassword" type="password" minlength="8" maxlength="128" autocomplete="new-password"></div><div class="profile-submit"><button id="profile-save" class="command-button" type="submit" data-copy="save">保存账号和密码</button></div></form></section></main>
-        <footer><span>OpenCode Go 额度工作台</span><span data-copy="security">安全设置</span></footer>
+      <aside class="console-sidebar" aria-label="主导航">
+        <a class="brand" href="/" aria-label="OpenCode Go"><span class="brand-mark" aria-hidden="true"><b>GO</b><small>Q</small></span><span class="brand-copy"><strong>OpenCode Go</strong><small>额度观测台</small></span></a>
+        <nav class="primary-nav">
+          <a href="/" data-nav="dashboard"><span>额度观测</span><small>5 小时・7 天・30 天</small></a>
+          <a href="/admin" data-nav="keys" data-admin-link><span>Key 资产</span><small>额度与生命周期</small></a>
+          <a id="users-link" href="/users" data-nav="users" data-admin-link><span>访问授权</span><span class="sr-only" aria-hidden="true" data-copy="users">用户管理</span><small>用户与 Key 范围</small></a>
+          <a href="/profile" data-nav="profile"><span>账户安全</span><small>登录凭据</small></a>
+        </nav>
+        <div class="sidebar-note"><span class="sidebar-note-label">凭据策略</span><strong>变更后旧会话失效</strong><span>仅保留当前设备登录</span></div>
+      </aside>
+
+      <div class="console-content">
+        <header class="global-bar">
+          <a class="mobile-brand" href="/" aria-label="OpenCode Go"><span class="brand-mark" aria-hidden="true"><b>GO</b><small>Q</small></span><span>OpenCode Go</span></a>
+          <div class="global-actions">
+            <div class="language-switch" role="group" aria-label="Language"><button type="button" data-locale="zh" aria-pressed="true">中文</button><button type="button" data-locale="en" aria-pressed="false">EN</button></div>
+            <a class="text-command" href="/">额度观测</a>
+            <button id="logout-button" class="text-command" type="button" data-copy="logout">退出登录</button>
+          </div>
+        </header>
+        <nav class="compact-nav" aria-label="主导航"><a href="/" data-nav="dashboard">额度观测</a><a href="/admin" data-nav="keys" data-admin-link>Key 资产</a><a href="/users" data-nav="users" data-admin-link>访问授权</a><a href="/profile" data-nav="profile">账户安全</a></nav>
+
+        <main class="workspace profile-workspace security-workspace">
+          <section class="page-header profile-header security-page-header" aria-labelledby="profile-page-title">
+            <div>
+              <p class="eyebrow" data-copy="eyebrow">账户安全</p>
+              <h1 id="profile-page-title" data-copy="title">账户安全</h1>
+              <p class="page-description">管理登录身份和密码凭据。</p>
+            </div>
+          </section>
+
+          <section id="profile-message" class="error-banner profile-message" role="status" hidden><strong id="profile-message-title"></strong><span id="profile-message-text"></span></section>
+
+          <section class="security-identity-band" aria-label="登录身份">
+            <div class="security-identity-main"><span class="section-kicker">当前登录身份</span><strong id="identity-summary" class="identity-summary">--</strong></div>
+            <div class="security-session-state"><span class="section-kicker">会话策略</span><strong>保存后其他旧会话失效</strong><span>修改后请使用新凭据重新登录。</span></div>
+          </section>
+
+          <section id="profile-editor" class="security-panel credential-panel" hidden>
+            <header><div><p class="section-kicker" data-copy="credentialKicker">登录凭据</p><h2 data-copy="editTitle">更换登录凭据</h2></div><span>当前密码用于确认身份，新密码可选。</span></header>
+            <form id="profile-form" class="profile-form">
+              <div class="credential-form-intro"><strong>更换登录凭据</strong><span>用户名和密码会同时更新，不填新密码则仅更新用户名。</span></div>
+              <div class="field"><label for="profile-username" data-copy="username">新登录用户名</label><input id="profile-username" name="username" minlength="3" maxlength="64" autocomplete="username" required></div>
+              <div class="field"><label for="current-password" data-copy="currentPassword">当前密码</label><input id="current-password" name="currentPassword" type="password" minlength="8" maxlength="128" autocomplete="current-password" required></div>
+              <div class="field"><label for="new-password" data-copy="newPassword">新密码（不修改可留空）</label><input id="new-password" name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password"></div>
+              <div class="field"><label for="confirm-password" data-copy="confirmPassword">确认新密码</label><input id="confirm-password" name="confirmPassword" type="password" minlength="8" maxlength="128" autocomplete="new-password"></div>
+              <div class="profile-submit"><button id="profile-save" class="command-button" type="submit" data-copy="save">保存账户凭据</button></div>
+            </form>
+          </section>
+        </main>
+
+        <footer><span>OpenCode Go 额度监控台</span><span data-copy="title">账户安全</span></footer>
       </div>
     </div>
-    <script type="module" src="/profile.js?v=console-4"></script>
+    <script type="module" src="/profile.js?v=console-5"></script>
   </body>
 </html>

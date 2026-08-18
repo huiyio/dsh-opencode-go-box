@@ -4,12 +4,45 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
-    <meta name="theme-color" content="#f4f6f5">
-    <title>OpenCode Go 登录</title>
-    <link rel="stylesheet" href="/styles.css?v=console-4">
+    <meta name="theme-color" content="#f3f1eb">
+    <title>OpenCode Go 额度监控台入口</title>
+    <link rel="stylesheet" href="/styles.css?v=console-5">
   </head>
-  <body class="auth-page">
-    <main class="auth-shell"><section class="auth-intro"><a class="brand" href="/login" aria-label="OpenCode Go"><span class="brand-mark" aria-hidden="true">GO</span><span class="brand-copy"><strong>OpenCode Go</strong><small>额度工作台</small></span></a><div><p class="eyebrow">受保护的后台</p><h1>登录后管理<br>账号与额度</h1><p>查看已授权账号的额度，管理 Key、生命周期和用户权限。</p></div><div class="auth-note"><strong>安全登录</strong><span>登录凭据和 Key 均不会返回到浏览器。</span></div></section><section class="login-panel" aria-labelledby="login-title"><div class="login-heading"><p class="eyebrow">账号登录</p><h2 id="login-title">欢迎回来</h2><p>请输入后台账号和密码。</p></div><form id="login-form" class="login-form"><label class="field"><span>账号</span><input id="login-username" name="username" autocomplete="username" required></label><label class="field"><span>密码</span><input id="login-password" name="password" type="password" autocomplete="current-password" required></label><p id="login-error" class="dialog-error" role="alert" hidden>账号或密码错误</p><button id="login-submit" class="command-button" type="submit">登录</button></form></section></main>
-    <script type="module" src="/login.js?v=console-4"></script>
+  <body class="auth-page quota-entry-page">
+    <main class="auth-shell quota-entry-shell">
+      <section class="auth-intro quota-entry-intro" aria-labelledby="entry-product-title">
+        <a class="brand" href="/login" aria-label="OpenCode Go"><span class="brand-mark" aria-hidden="true"><b>GO</b><small>Q</small></span><span class="brand-copy"><strong>OpenCode Go</strong><small>额度观测台</small></span></a>
+        <div class="quota-entry-heading">
+          <p class="eyebrow">OpenCode Go 账号额度</p>
+          <h1 id="entry-product-title">一处观测<br>Key 的可用额度</h1>
+          <p>登录后仅显示已授权的 Key，同步 5 小时、7 天和 30 天额度窗口。</p>
+        </div>
+
+        <div class="entry-quota-instrument" aria-label="额度窗口预览">
+          <div class="entry-instrument-head"><span>额度窗口</span><strong>登录后实时读取</strong></div>
+          <div class="entry-window" data-window-preview="rolling"><span>5 小时</span><div class="entry-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><strong>滚动额度</strong></div>
+          <div class="entry-window" data-window-preview="weekly"><span>7 天</span><div class="entry-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><strong>周期额度</strong></div>
+          <div class="entry-window" data-window-preview="monthly"><span>30 天</span><div class="entry-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><strong>长周期额度</strong></div>
+        </div>
+
+        <div class="auth-note entry-security-note"><strong>受控访问</strong><span>登录权限决定可见 Key，原始 Key 不会下发到浏览器。</span></div>
+      </section>
+
+      <section class="login-panel quota-login-panel" aria-labelledby="login-title">
+        <div class="login-heading">
+          <p class="eyebrow">受保护的额度接口</p>
+          <h2 id="login-title">进入额度监控台</h2>
+          <p>使用管理员或已授权用户凭据登录。</p>
+        </div>
+        <form id="login-form" class="login-form">
+          <label class="field"><span>登录账号</span><input id="login-username" name="username" autocomplete="username" required></label>
+          <label class="field"><span>登录密码</span><input id="login-password" name="password" type="password" autocomplete="current-password" required></label>
+          <p id="login-error" class="dialog-error" role="alert" hidden>账号或密码错误</p>
+          <button id="login-submit" class="command-button" type="submit">进入控制台</button>
+        </form>
+        <p class="login-scope-note">普通用户仅能查看管理员授权的 Key 额度。</p>
+      </section>
+    </main>
+    <script type="module" src="/login.js?v=console-5"></script>
   </body>
 </html>

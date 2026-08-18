@@ -1,13 +1,13 @@
 const copy = {
   zh: {
-    eyebrow: "账号管理",
-    title: "Key 管理",
-    subtitle: "添加和管理额度看板使用的账号",
-    addTitle: "添加 Key",
+    eyebrow: "Key 资产控制",
+    title: "Key 资产",
+    subtitle: "集中观测 Key 的额度、生命周期和真实模型探测结果。",
+    addTitle: "录入 Key 资产",
     label: "账号名称",
     apiKey: "API Key",
     add: "添加",
-    accounts: "账号",
+    accounts: "Key 资产节点",
     accountCount: "数量",
     backup: "下载备份",
     restore: "恢复备份",
@@ -18,7 +18,7 @@ const copy = {
     seconds: "秒",
     minutes: "分钟",
     encrypted: "AES-256-GCM 加密存储",
-    editTitle: "编辑账号",
+    editTitle: "编辑 Key 资产",
     replacementKey: "替换 Key（留空则不修改）",
     enabled: "启用",
     disabled: "已停用",
@@ -30,8 +30,8 @@ const copy = {
     remove: "删除",
     cancel: "取消",
     save: "保存",
-    back: "返回看板",
-    manageUsers: "用户管理",
+    back: "额度观测",
+    manageUsers: "访问授权",
     logout: "退出登录",
     empty: "还没有保存的 Key",
     errorTitle: "操作失败",
@@ -39,11 +39,18 @@ const copy = {
     duplicate: "这个 Key 已经存在。",
     invalid: "请检查账号名称和 Key。",
     generic: "服务暂时不可用，请稍后重试。",
+    accountDisabled: "账号已停用。",
+    accountNotStarted: "账号尚未到开通日期。",
+    accountExpired: "账号已过期。",
+    upstreamUnauthorized: "上游 Key 无效或已过期。",
+    upstreamTimeout: "上游请求超时。",
+    upstreamUnavailable: "暂时无法连接上游服务。",
     confirmRemove: "确定删除账号“{label}”？此操作无法撤销。",
     refreshAll: "刷新全部额度",
     remainingQuota: "剩余",
     reset: "重置",
     quotaFailed: "查询失败",
+    quotaFailedReason: "原因",
     remaining: "剩余",
     used: "已用",
     rollingPeriod: "5小时",
@@ -51,13 +58,16 @@ const copy = {
     monthlyPeriod: "30天",
     testKey: "测试模型",
     testingKey: "模型测试中",
-    testPassed: "模型可用",
-    testDepleted: "模型不可用·额度已耗尽",
+    testPassed: "模型请求成功",
+    testDepleted: "模型请求被限流",
     testInvalid: "Key 无效",
-    testFailed: "检测失败",
-    testDialogTitle: "选择测试模型",
-    testModelLabel: "模型",
-    startModelTest: "开始测试",
+    testFailed: "探测失败",
+    testQuotaDepleted: "有额度窗口已耗尽",
+    testCompleted: "测试完成",
+    testNoResult: "尚未测试",
+    testDialogTitle: "选择模型并发送真实请求",
+    testModelLabel: "测试模型",
+    startModelTest: "开始真实测试",
     modelListFailed: "模型列表加载失败，请稍后重试。",
     addedAt: "添加时间",
     startsAt: "开通日期",
@@ -66,6 +76,18 @@ const copy = {
     autoDeleteEnabled: "到期自动删除",
     pending: "待开通",
     expired: "已到期",
+    active: "当前可用",
+    lifecycle: "生命周期",
+    lifecycleStarted: "已开通",
+    lifecycleRemaining: "剩余 {days} 天",
+    lifecycleNoExpiry: "未设置结束日期",
+    lifecycleOngoing: "持续有效",
+    lifecycleNoDates: "未设置生命周期",
+    lifecycleAutoDelete: "到期自动删除",
+    sourceLabel: "来源",
+    visibleCount: "显示",
+    filteredEmpty: "没有符合筛选条件的 Key 资产",
+    searchPlaceholder: "搜索账号或 Key 尾号",
     usersTitle: "用户管理",
     usersSubtitle: "用户只能查看已授权的账号额度，未授权时看不到任何账号数据",
     username: "用户名",
@@ -83,9 +105,9 @@ const copy = {
     invalidUser: "请检查用户名、密码和账号授权。",
   },
   en: {
-    eyebrow: "Account management",
+    eyebrow: "Key asset control",
     title: "OpenCode Go Keys",
-    subtitle: "Add and manage accounts used by the quota dashboard",
+    subtitle: "Observe quota windows, lifecycle, and real model probes for every key",
     addTitle: "Add key",
     label: "Account label",
     apiKey: "API key",
@@ -113,8 +135,8 @@ const copy = {
     remove: "Delete",
     cancel: "Cancel",
     save: "Save",
-    back: "Back to dashboard",
-    manageUsers: "User management",
+    back: "Quota view",
+    manageUsers: "Access authorization",
     logout: "Sign out",
     empty: "No stored keys yet",
     errorTitle: "Operation failed",
@@ -122,11 +144,18 @@ const copy = {
     duplicate: "This key already exists.",
     invalid: "Check the account label and API key.",
     generic: "The service is temporarily unavailable. Try again later.",
+    accountDisabled: "The account is disabled.",
+    accountNotStarted: "The account has not reached its start date.",
+    accountExpired: "The account has expired.",
+    upstreamUnauthorized: "The upstream key is invalid or expired.",
+    upstreamTimeout: "The upstream request timed out.",
+    upstreamUnavailable: "The upstream service is currently unreachable.",
     confirmRemove: "Delete account “{label}”? This cannot be undone.",
     refreshAll: "Refresh all quotas",
     remainingQuota: "Remaining",
     reset: "Resets",
     quotaFailed: "Query failed",
+    quotaFailedReason: "Reason",
     remaining: "Remaining",
     used: "Used",
     rollingPeriod: "5 hours",
@@ -138,6 +167,8 @@ const copy = {
     testDepleted: "Model unavailable · quota exhausted",
     testInvalid: "Key invalid",
     testFailed: "Test failed",
+    testCompleted: "Test completed",
+    testNoResult: "Not tested",
     testDialogTitle: "Choose a test model",
     testModelLabel: "Model",
     startModelTest: "Start test",
@@ -149,6 +180,18 @@ const copy = {
     autoDeleteEnabled: "Deletes automatically at expiry",
     pending: "Pending",
     expired: "Expired",
+    active: "Available",
+    lifecycle: "Lifecycle",
+    lifecycleStarted: "Started",
+    lifecycleRemaining: "{days} days left",
+    lifecycleNoExpiry: "No end date",
+    lifecycleOngoing: "Active without an end date",
+    lifecycleNoDates: "No lifecycle dates",
+    lifecycleAutoDelete: "Auto-delete at expiry",
+    sourceLabel: "Source",
+    visibleCount: "Showing",
+    filteredEmpty: "No key assets match this filter",
+    searchPlaceholder: "Search account or key suffix",
     usersTitle: "User management",
     usersSubtitle: "Users can only view assigned accounts; unassigned users receive no account data",
     username: "Username",
@@ -171,6 +214,13 @@ const addForm = document.querySelector("#add-form");
 const addButton = document.querySelector("#add-button");
 const accountList = document.querySelector("#account-list");
 const accountCount = document.querySelector("#account-count");
+const accountSearch = document.querySelector("#account-search");
+const accountFilter = document.querySelector("#account-filter");
+const keySummaryTotal = document.querySelector("#key-summary-total");
+const keySummaryActive = document.querySelector("#key-summary-active");
+const keySummaryRisk = document.querySelector("#key-summary-risk");
+const keySummaryAttention = document.querySelector("#key-summary-attention");
+const keySummaryTested = document.querySelector("#key-summary-tested");
 const errorBanner = document.querySelector("#admin-error");
 const errorTitle = document.querySelector("#admin-error-title");
 const errorMessage = document.querySelector("#admin-error-message");
@@ -232,7 +282,7 @@ function t(key) {
 function setLocale(nextLocale) {
   locale = nextLocale === "en" ? "en" : "zh";
   document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
-  document.title = locale === "zh" ? "OpenCode Go Key 管理" : "OpenCode Go key management";
+  document.title = locale === "zh" ? "OpenCode Go Key 资产" : "OpenCode Go key assets";
   try {
     localStorage.setItem("opencode-go-locale", locale);
   } catch {
@@ -256,6 +306,7 @@ function setLocale(nextLocale) {
   backupButton.setAttribute("aria-label", t("backup"));
   restoreButton.title = t("restore");
   restoreButton.setAttribute("aria-label", t("restore"));
+  if (accountSearch) accountSearch.placeholder = t("searchPlaceholder");
   renderAccounts();
 }
 
@@ -324,6 +375,12 @@ function errorText(code) {
   if (code === "duplicate_key") return t("duplicate");
   if (code === "invalid_backup") return t("invalidBackup");
   if (code === "invalid_lifecycle") return t("invalid");
+  if (code === "account_disabled") return t("accountDisabled");
+  if (code === "account_not_started") return t("accountNotStarted");
+  if (code === "account_expired") return t("accountExpired");
+  if (code === "upstream_unauthorized") return t("upstreamUnauthorized");
+  if (code === "upstream_timeout") return t("upstreamTimeout");
+  if (code === "upstream_unavailable" || code === "upstream_http_error") return t("upstreamUnavailable");
   if (code?.startsWith("invalid_")) return t("invalid");
   return t("generic");
 }
@@ -438,11 +495,58 @@ function quotaLevel(percent, thresholds) {
   return "";
 }
 
-function testResultForUsage(payload) {
-  const windows = Object.values(payload?.usage || {});
-  return windows.some((value) => typeof value?.remainingPercent === "number" && value.remainingPercent <= 0)
-    ? "depleted"
-    : "passed";
+function lifecycleStateFor(account) {
+  return account.lifecycleStatus || (account.enabled ? "active" : "disabled");
+}
+
+function dateOnlyToUtc(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  const timestamp = Date.UTC(year, month - 1, day);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function lifecycleDays(account) {
+  if (!account.expiresAt) return null;
+  const today = dateOnlyToUtc(todayDate());
+  const expiry = dateOnlyToUtc(account.expiresAt);
+  if (today === null || expiry === null) return null;
+  return Math.max(0, Math.ceil((expiry - today) / 86400000));
+}
+
+function lifecycleProgress(account) {
+  const start = dateOnlyToUtc(account.startsAt);
+  const expiry = dateOnlyToUtc(account.expiresAt);
+  const today = dateOnlyToUtc(todayDate());
+  if (start === null || expiry === null || today === null || expiry <= start) return null;
+  return Math.min(100, Math.max(0, ((today - start) / (expiry - start)) * 100));
+}
+
+function testCompleted(testResult) {
+  return Boolean(testResult && testResult.state);
+}
+
+function accountHasRisk(account) {
+  const state = usageByAccount.get(account.id);
+  if (!state || state.kind !== "done") return false;
+  return Object.values(state.value?.usage || {}).some((value) => (
+    typeof value?.remainingPercent === "number" && value.remainingPercent <= 20
+  ));
+}
+
+function accountMatchesFilter(account) {
+  const query = String(accountSearch?.value || "").trim().toLocaleLowerCase();
+  const haystack = `${account.label || ""} ${account.maskedKey || ""}`.toLocaleLowerCase();
+  if (query && !haystack.includes(query)) return false;
+  const filter = accountFilter?.value || "all";
+  const lifecycleState = lifecycleStateFor(account);
+  if (filter === "active") return lifecycleState === "active";
+  if (filter === "risk") return accountHasRisk(account);
+  if (filter === "pending") return lifecycleState === "pending";
+  if (filter === "expired") return lifecycleState === "expired";
+  if (filter === "disabled") return lifecycleState === "disabled";
+  if (filter === "test-failed") return testResults.get(account.id)?.state && testResults.get(account.id).state !== "passed";
+  return true;
 }
 
 function quotaSummary(account) {
@@ -451,61 +555,155 @@ function quotaSummary(account) {
   summary.setAttribute("aria-label", t("remainingQuota"));
   const state = usageByAccount.get(account.id);
   const windows = [
-    ["rolling", t("rollingPeriod")],
-    ["weekly", t("weeklyPeriod")],
-    ["monthly", t("monthlyPeriod")],
+    ["rolling", t("rollingPeriod"), "5H"],
+    ["weekly", t("weeklyPeriod"), "7D"],
+    ["monthly", t("monthlyPeriod"), "30D"],
   ];
 
-  for (const [name, label] of windows) {
+  for (const [name, label, code] of windows) {
     const metric = document.createElement("div");
-    metric.className = "quota-metric";
+    metric.className = `quota-metric quota-metric-${name}`;
+    metric.dataset.window = name;
+    const head = document.createElement("div");
+    head.className = "quota-metric-head";
     const metricLabel = document.createElement("span");
     metricLabel.className = "quota-period";
-    metricLabel.textContent = label;
+    metricLabel.innerHTML = `<b>${code}</b><span>${label}</span>`;
+    const remaining = document.createElement("strong");
+    remaining.className = "quota-remaining";
+    remaining.textContent = "--";
+    head.append(metricLabel, remaining);
+
+    const track = document.createElement("div");
+    track.className = "quota-mini-track";
+    track.setAttribute("role", "progressbar");
+    track.setAttribute("aria-valuemin", "0");
+    track.setAttribute("aria-valuemax", "100");
+    track.setAttribute("aria-valuenow", "0");
+    const fill = document.createElement("span");
+    fill.className = "quota-used-fill";
+    track.append(fill);
+
+    const foot = document.createElement("div");
+    foot.className = "quota-metric-foot";
+    const used = document.createElement("span");
+    used.className = "quota-used";
+    used.textContent = `${t("used")} --`;
     const resetAt = document.createElement("time");
     resetAt.className = "quota-reset";
-    resetAt.textContent = "--";
-    const value = document.createElement("strong");
+    resetAt.textContent = `${t("reset")} --`;
+    foot.append(used, resetAt);
 
-    if (account.lifecycleStatus && account.lifecycleStatus !== "active") {
-      value.textContent = "--";
+    if (lifecycleStateFor(account) !== "active") {
+      metric.classList.add("is-unavailable");
+      remaining.textContent = "--";
+      used.textContent = lifecycleStateFor(account) === "pending" ? t("pending") : lifecycleStateFor(account) === "expired" ? t("expired") : t("disabled");
     } else if (!state || state.kind === "loading") {
-      value.textContent = "…";
+      metric.classList.add("is-loading");
+      remaining.textContent = "…";
+      used.textContent = `${t("used")} …`;
     } else if (state.kind === "failed") {
-      metric.className += " is-failed";
-      value.textContent = "!";
-      metric.title = t("quotaFailed");
+      metric.classList.add("is-failed");
+      remaining.textContent = t("quotaFailed");
+      used.textContent = `${t("quotaFailedReason")}: ${errorText(state.error?.code)}`;
+      metric.title = errorText(state.error?.code);
     } else {
       const windowValue = state.value.usage?.[name];
-      resetAt.textContent = formatResetDate(windowValue?.resetsAt);
+      const percent = typeof windowValue?.percent === "number" ? Math.min(100, Math.max(0, windowValue.percent)) : null;
+      const remainingPercent = typeof windowValue?.remainingPercent === "number"
+        ? Math.min(100, Math.max(0, windowValue.remainingPercent))
+        : null;
+      remaining.textContent = formatRemaining(remainingPercent);
+      used.textContent = `${t("used")} ${formatRemaining(percent)}`;
+      fill.style.width = `${percent ?? 0}%`;
+      track.setAttribute("aria-valuenow", String(percent ?? 0));
+      resetAt.textContent = `${t("reset")} ${formatResetDate(windowValue?.resetsAt)}`;
       resetAt.dateTime = windowValue?.resetsAt || "";
-      value.textContent = `${t("remaining")} ${formatRemaining(windowValue?.remainingPercent)}`;
-      metric.className += quotaLevel(windowValue?.percent, state.value.thresholds || { warn: 60, danger: 85 });
-      metric.title = `${t("remaining")}: ${formatRemaining(windowValue?.remainingPercent)}; ${t("used")}: ${formatRemaining(windowValue?.percent)}; ${t("reset")} ${resetAt.textContent}`;
+      metric.className += quotaLevel(percent, state.value.thresholds || { warn: 60, danger: 85 });
+      metric.title = `${t("remaining")}: ${formatRemaining(remainingPercent)}; ${t("used")}: ${formatRemaining(percent)}; ${t("reset")} ${formatResetDate(windowValue?.resetsAt)}`;
     }
 
-    metric.append(metricLabel, resetAt, value);
+    metric.append(head, track, foot);
     summary.append(metric);
   }
   return summary;
 }
 
+function lifecyclePanel(account, lifecycleState) {
+  const panel = document.createElement("section");
+  panel.className = "account-details lifecycle-panel";
+  const heading = document.createElement("div");
+  heading.className = "lifecycle-heading";
+  const title = document.createElement("span");
+  title.textContent = t("lifecycle");
+  const state = document.createElement("strong");
+  state.className = `status-label lifecycle-state is-${lifecycleState}`;
+  state.textContent = lifecycleState === "active" ? t("active") : lifecycleState === "pending" ? t("pending") : lifecycleState === "expired" ? t("expired") : t("disabled");
+  heading.append(title, state);
+  const track = document.createElement("div");
+  track.className = "lifecycle-line";
+  const fill = document.createElement("span");
+  fill.style.width = `${lifecycleProgress(account) ?? (lifecycleState === "expired" ? 100 : 0)}%`;
+  track.append(fill);
+  const dates = document.createElement("div");
+  dates.className = "lifecycle-dates";
+  const start = document.createElement("span");
+  start.textContent = `${t("lifecycleStarted")} ${displayLifecycleDate(account.startsAt)}`;
+  const end = document.createElement("span");
+  end.textContent = account.expiresAt ? `${t("expiresAt")} ${displayLifecycleDate(account.expiresAt)}` : t("lifecycleNoExpiry");
+  dates.append(start, end);
+  const note = document.createElement("p");
+  const days = lifecycleDays(account);
+  if (account.autoDelete) {
+    note.textContent = days === null ? t("lifecycleAutoDelete") : `${t("lifecycleRemaining").replace("{days}", String(days))} · ${t("lifecycleAutoDelete")}`;
+  } else if (!account.startsAt && !account.expiresAt) {
+    note.textContent = t("lifecycleNoDates");
+  } else if (days !== null && lifecycleState === "active") {
+    note.textContent = t("lifecycleRemaining").replace("{days}", String(days));
+  } else if (lifecycleState === "active") {
+    note.textContent = t("lifecycleOngoing");
+  } else {
+    note.textContent = lifecycleState === "pending" ? t("pending") : lifecycleState === "expired" ? t("expired") : t("disabled");
+  }
+  panel.append(heading, track, dates, note);
+  return panel;
+}
+
+function updateKeySummary() {
+  const active = accounts.filter((account) => lifecycleStateFor(account) === "active").length;
+  const risk = accounts.filter(accountHasRisk).length;
+  const attention = accounts.filter((account) => lifecycleStateFor(account) !== "active").length;
+  const tested = [...testResults.values()].filter(testCompleted).length;
+  keySummaryTotal.textContent = String(accounts.length);
+  keySummaryActive.textContent = String(active);
+  keySummaryRisk.textContent = String(risk);
+  keySummaryAttention.textContent = String(attention);
+  keySummaryTested.textContent = String(tested);
+}
+
 function renderAccounts() {
   accountList.replaceChildren();
+  updateKeySummary();
+  const visibleAccounts = accounts.filter(accountMatchesFilter);
   accountCount.textContent = locale === "zh"
     ? `${t("accountCount")}：${accounts.length}`
     : `${t("accountCount")}: ${accounts.length}`;
-  if (accounts.length === 0) {
+  accountCount.title = `${t("visibleCount")}: ${visibleAccounts.length}`;
+  if (accounts.length === 0 || visibleAccounts.length === 0) {
     const empty = document.createElement("p");
     empty.className = "empty-state";
-    empty.textContent = t("empty");
+    empty.textContent = accounts.length === 0 ? t("empty") : t("filteredEmpty");
     accountList.append(empty);
     return;
   }
 
-  for (const account of accounts) {
+  for (const account of visibleAccounts) {
     const row = document.createElement("article");
-    row.className = "account-row";
+    const lifecycleState = lifecycleStateFor(account);
+    row.className = "account-row key-node";
+    row.dataset.lifecycle = lifecycleState;
+    row.dataset.source = account.source || "stored";
+    row.dataset.accountId = account.id;
 
     const identity = document.createElement("div");
     identity.className = "account-identity";
@@ -513,70 +711,15 @@ function renderAccounts() {
     label.textContent = account.label;
     const maskedKey = document.createElement("code");
     maskedKey.textContent = account.maskedKey;
-    identity.append(label, maskedKey);
+    const identityMeta = document.createElement("span");
+    identityMeta.className = "identity-meta";
     const addedAt = formatAccountDate(account.createdAt);
-    if (addedAt) {
-      const created = document.createElement("span");
-      created.textContent = `${t("addedAt")}: ${addedAt}`;
-      identity.append(created);
-    }
-
-    const details = document.createElement("div");
-    details.className = "account-details";
-    const status = document.createElement("span");
-    const lifecycleState = account.lifecycleStatus || (account.enabled ? "active" : "disabled");
-    status.className = `status-label${lifecycleState === "active" ? "" : ` is-${lifecycleState}`}`;
-    status.textContent = lifecycleState === "pending"
-      ? t("pending")
-      : lifecycleState === "expired"
-        ? t("expired")
-        : lifecycleState === "disabled"
-          ? t("disabled")
-          : t("enabled");
+    identityMeta.textContent = `${t("addedAt")}: ${addedAt || "--"}`;
+    identity.append(label, maskedKey, identityMeta);
     const source = document.createElement("span");
-    source.textContent = account.source === "environment" ? t("environment") : t("stored");
-    details.append(status, source);
-    if (account.startsAt) {
-      const starts = document.createElement("span");
-      starts.textContent = `${t("startsAt")}: ${displayLifecycleDate(account.startsAt)}`;
-      details.append(starts);
-    }
-    if (account.expiresAt) {
-      const expires = document.createElement("span");
-      expires.textContent = `${t("expiresAt")}: ${displayLifecycleDate(account.expiresAt)}`;
-      details.append(expires);
-    }
-    if (account.autoDelete) {
-      const autoDelete = document.createElement("span");
-      autoDelete.textContent = t("autoDeleteEnabled");
-      details.append(autoDelete);
-    }
-
-    const testPanel = document.createElement("div");
-    testPanel.className = "account-test";
-    testPanel.setAttribute("aria-live", "polite");
-    const testResult = testResults.get(account.id);
-    const testButton = actionButton(
-      testingAccounts.has(account.id)
-        ? t("testingKey")
-        : t("testKey"),
-      "secondary test-button",
-      () => openTestDialog(account),
-    );
-    testButton.disabled = busy || lifecycleState !== "active" || testingAccounts.has(account.id);
-    testPanel.append(testButton);
-    if (testResult) {
-      const result = document.createElement("span");
-      result.className = `test-status is-${testResult}`;
-      result.textContent = testResult === "passed"
-        ? t("testPassed")
-        : testResult === "depleted"
-          ? t("testDepleted")
-          : testResult === "invalid"
-            ? t("testInvalid")
-            : t("testFailed");
-      testPanel.append(result);
-    }
+    source.className = "asset-source";
+    source.textContent = `${t("sourceLabel")}: ${account.source === "environment" ? t("environment") : t("stored")}`;
+    identity.append(source);
 
     const actions = document.createElement("div");
     actions.className = "account-actions";
@@ -587,7 +730,34 @@ function renderAccounts() {
         actionButton(t("remove"), "danger", () => removeAccount(account)),
       );
     }
-    row.append(identity, details, quotaSummary(account), testPanel, actions);
+    const testPanel = document.createElement("section");
+    testPanel.className = "account-test model-probe";
+    testPanel.setAttribute("aria-live", "polite");
+    const testButton = actionButton(testingAccounts.has(account.id) ? t("testingKey") : t("testKey"), "secondary test-button", () => openTestDialog(account));
+    testButton.disabled = busy || lifecycleState !== "active" || testingAccounts.has(account.id);
+    const testResult = testResults.get(account.id);
+    const result = document.createElement("strong");
+    result.className = `test-status ${testResult ? `is-${testResult.state}` : "is-empty"}`;
+    result.textContent = !testResult
+      ? t("testNoResult")
+      : testResult.state === "passed"
+        ? t("testPassed")
+        : testResult.state === "depleted"
+          ? t("testDepleted")
+          : testResult.state === "invalid"
+            ? t("testInvalid")
+            : t("testFailed");
+    const testMeta = document.createElement("span");
+    testMeta.className = "test-meta";
+    if (testResult) {
+      const model = testResult.model || "--";
+      const completed = formatAccountDate(testResult.completedAt);
+      testMeta.textContent = `${model} · ${t("testCompleted")} ${completed || "--"}`;
+    } else {
+      testMeta.hidden = true;
+    }
+    testPanel.append(result, testMeta, testButton);
+    row.append(identity, lifecyclePanel(account, lifecycleState), testPanel, actions, quotaSummary(account));
     accountList.append(row);
   }
 }
@@ -618,17 +788,22 @@ async function openTestDialog(account) {
 }
 
 async function testAccount(account, model) {
-  if (busy || account.lifecycleStatus !== "active" || testingAccounts.has(account.id)) return;
+  if (busy || lifecycleStateFor(account) !== "active" || testingAccounts.has(account.id)) return;
   testingAccounts.add(account.id);
   testResults.delete(account.id);
   const previousUsage = usageByAccount.get(account.id);
-  usageByAccount.set(account.id, { kind: "loading" });
   renderAccounts();
 
   try {
-    await api(`/api/admin/accounts/${encodeURIComponent(account.id)}/test`, {
+    const result = await api(`/api/admin/accounts/${encodeURIComponent(account.id)}/test`, {
       method: "POST",
       body: JSON.stringify({ model }),
+    });
+    const modelTest = result.modelTest || result.valid || result;
+    testResults.set(account.id, {
+      state: "passed",
+      model: modelTest?.model || model,
+      completedAt: modelTest?.completedAt || new Date().toISOString(),
     });
     let quotaPayload = null;
     try {
@@ -639,19 +814,20 @@ async function testAccount(account, model) {
     }
     if (quotaPayload) {
       usageByAccount.set(account.id, { kind: "done", value: quotaPayload });
-      testResults.set(account.id, testResultForUsage(quotaPayload));
     } else {
       if (previousUsage) usageByAccount.set(account.id, previousUsage);
-      testResults.set(account.id, "passed");
     }
   } catch (error) {
-    usageByAccount.set(account.id, { kind: "failed", error });
-    testResults.set(account.id,
-      error?.code === "model_unauthorized"
+    if (previousUsage) usageByAccount.set(account.id, previousUsage);
+    testResults.set(account.id, {
+      state: error?.code === "model_unauthorized"
         ? "invalid"
         : error?.code === "model_rate_limited"
           ? "depleted"
-          : "failed");
+          : "failed",
+      model,
+      completedAt: new Date().toISOString(),
+    });
   } finally {
     testingAccounts.delete(account.id);
     renderAccounts();
@@ -683,7 +859,9 @@ async function performLoadAccountUsages(force) {
     }
   }
   for (const account of accounts) {
-    usageByAccount.set(account.id, { kind: account.enabled ? "loading" : "disabled" });
+    usageByAccount.set(account.id, {
+      kind: lifecycleStateFor(account) === "active" ? "loading" : "disabled",
+    });
   }
   refreshAllButton.disabled = true;
   refreshAllButton.classList.add("is-loading");
@@ -885,6 +1063,8 @@ autoRefreshForm.addEventListener("submit", (event) => event.preventDefault());
 autoRefreshEnabled.addEventListener("change", applyAutoRefreshSetting);
 autoRefreshValue.addEventListener("change", applyAutoRefreshSetting);
 autoRefreshUnit.addEventListener("change", applyAutoRefreshSetting);
+accountSearch?.addEventListener("input", renderAccounts);
+accountFilter?.addEventListener("change", renderAccounts);
 
 const storedAutoRefresh = readAutoRefreshSetting();
 autoRefreshEnabled.checked = storedAutoRefresh.enabled;
