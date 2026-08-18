@@ -35,6 +35,19 @@ function normalizeLabel(value) {
   return label;
 }
 
+function normalizeGroup(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") {
+    throw new KeyStoreError("invalid_group", "Group must contain 1 to 60 characters without line breaks");
+  }
+  const group = value.trim();
+  if (group === "") return null;
+  if (group.length > 60 || /[\r\n]/.test(group)) {
+    throw new KeyStoreError("invalid_group", "Group must contain 1 to 60 characters without line breaks");
+  }
+  return group;
+}
+
 function normalizeKey(value) {
   const key = typeof value === "string" ? value.trim() : "";
   if (key.length < 8 || key.length > 512 || /[\r\n]/.test(key)) {
@@ -91,6 +104,7 @@ function publicAccount(account) {
   return {
     id: account.id,
     label: account.label,
+    group: account.group || null,
     maskedKey: `••••••••${account.key.slice(-4)}`,
     enabled: account.enabled,
     editable: true,
@@ -169,6 +183,7 @@ export class EncryptedKeyStore {
       if (!payload || !Array.isArray(payload.accounts)) throw new Error("Invalid key store payload");
       this.accounts = payload.accounts.map((account) => ({
         ...account,
+        group: typeof account.group === "string" && account.group.trim() ? account.group.trim() : null,
         ...lifecycle({}, account, typeof account.createdAt === "string" ? zonedDate(new Date(account.createdAt)) : null),
       }));
     } catch (error) {
@@ -193,7 +208,7 @@ export class EncryptedKeyStore {
     return { ...publicAccount(account), key: account.key };
   }
 
-  async add({ label, key, startsAt, expiresAt, autoDelete }) {
+  async add({ label, key, group, startsAt, expiresAt, autoDelete }) {
     return this.#mutate(async () => {
       const normalizedKey = normalizeKey(key);
       if (this.accounts.some((account) => account.key === normalizedKey)) {
@@ -204,6 +219,7 @@ export class EncryptedKeyStore {
       const account = {
         id: this.createId(),
         label: normalizeLabel(label),
+        group: normalizeGroup(group),
         key: normalizedKey,
         enabled: true,
         createdAt: timestamp,
@@ -221,6 +237,7 @@ export class EncryptedKeyStore {
       const account = this.accounts.find((candidate) => candidate.id === id);
       if (!account) throw new KeyStoreError("account_not_found", "Account not found", 404);
       if (Object.hasOwn(changes, "label")) account.label = normalizeLabel(changes.label);
+      if (Object.hasOwn(changes, "group")) account.group = normalizeGroup(changes.group);
       if (Object.hasOwn(changes, "key") && changes.key !== "") {
         const normalizedKey = normalizeKey(changes.key);
         if (this.accounts.some((candidate) => candidate.id !== id && candidate.key === normalizedKey)) {
@@ -293,7 +310,7 @@ export class EncryptedKeyStore {
           throw new KeyStoreError("invalid_backup", "The backup account data is invalid");
         }
         const dates = lifecycle(account, null, zonedDate(new Date(account.createdAt)));
-        return { id: account.id, label, key, enabled: account.enabled, createdAt: account.createdAt, updatedAt: account.updatedAt, ...dates };
+        return { id: account.id, label, group: normalizeGroup(account.group), key, enabled: account.enabled, createdAt: account.createdAt, updatedAt: account.updatedAt, ...dates };
       });
       if (new Set(restored.map((account) => account.id)).size !== restored.length
         || new Set(restored.map((account) => account.key)).size !== restored.length) {

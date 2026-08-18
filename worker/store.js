@@ -23,6 +23,19 @@ function normalizeLabel(value) {
   return label;
 }
 
+function normalizeGroup(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") {
+    throw new WorkerError("invalid_group", "Group must contain 1 to 60 characters without line breaks");
+  }
+  const group = value.trim();
+  if (group === "") return null;
+  if (group.length > 60 || /[\r\n]/.test(group)) {
+    throw new WorkerError("invalid_group", "Group must contain 1 to 60 characters without line breaks");
+  }
+  return group;
+}
+
 function normalizeKey(value) {
   const key = typeof value === "string" ? value.trim() : "";
   if (key.length < 8 || key.length > 512 || /[\r\n]/.test(key)) {
@@ -79,6 +92,7 @@ function environmentAccount(apiKey) {
   return {
     id: ENVIRONMENT_ACCOUNT_ID,
     label: "Environment key",
+    group: null,
     maskedKey: `••••••••${apiKey.slice(-4)}`,
     enabled: true,
     editable: false,
@@ -96,6 +110,7 @@ function publicStoredAccount(row) {
   const account = {
     id: row.id,
     label: row.label,
+    group: row.group_name || null,
     maskedKey: `••••••••${row.key_suffix}`,
     enabled: Boolean(row.enabled),
     editable: true,
@@ -164,6 +179,7 @@ export class AccountStore {
   async add(input) {
     if (!this.writable) throw new WorkerError("key_store_disabled", "Account management is disabled", 503);
     const label = normalizeLabel(input?.label);
+    const group = normalizeGroup(input?.group);
     const key = normalizeKey(input?.key);
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -176,10 +192,10 @@ export class AccountStore {
     if (duplicate) throw new WorkerError("duplicate_key", "This API key already exists", 409);
     try {
       await this.env.DB.prepare(`INSERT INTO accounts (
-        id, label, key_ciphertext, key_iv, key_salt, key_fingerprint, key_suffix, enabled,
+        id, label, group_name, key_ciphertext, key_iv, key_salt, key_fingerprint, key_suffix, enabled,
         starts_at, expires_at, auto_delete, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`).bind(
-        id, label, encrypted.ciphertext, encrypted.iv, encrypted.salt, fingerprint, key.slice(-4),
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`).bind(
+        id, label, group, encrypted.ciphertext, encrypted.iv, encrypted.salt, fingerprint, key.slice(-4),
         dates.startsAt, dates.expiresAt, dates.autoDelete ? 1 : 0, now, now,
       ).run();
     } catch (error) {
@@ -189,7 +205,7 @@ export class AccountStore {
       throw error;
     }
     return {
-      id, label, maskedKey: `••••••••${key.slice(-4)}`, enabled: true,
+      id, label, group, maskedKey: `••••••••${key.slice(-4)}`, enabled: true,
       editable: true, source: "stored", createdAt: now, updatedAt: now, ...dates,
       lifecycleStatus: lifecycleStatus({ enabled: true, ...dates }),
     };
@@ -199,6 +215,7 @@ export class AccountStore {
     const row = await this.env.DB.prepare("SELECT * FROM accounts WHERE id = ?").bind(id).first();
     if (!row) throw new WorkerError("account_not_found", "Account not found", 404);
     const label = Object.hasOwn(input, "label") ? normalizeLabel(input.label) : row.label;
+    const group = Object.hasOwn(input, "group") ? normalizeGroup(input.group) : row.group_name || null;
     const enabled = Object.hasOwn(input, "enabled") ? (Boolean(input.enabled) ? 1 : 0) : row.enabled;
     const now = new Date().toISOString();
     const dates = lifecycle(input || {}, {
@@ -223,16 +240,16 @@ export class AccountStore {
       suffix = key.slice(-4);
     }
     const statements = [this.env.DB.prepare(`UPDATE accounts SET
-      label = ?, key_ciphertext = ?, key_iv = ?, key_salt = ?, key_fingerprint = ?, key_suffix = ?, enabled = ?,
+      label = ?, group_name = ?, key_ciphertext = ?, key_iv = ?, key_salt = ?, key_fingerprint = ?, key_suffix = ?, enabled = ?,
       starts_at = ?, expires_at = ?, auto_delete = ?, updated_at = ?
       WHERE id = ?`).bind(
-      label, encrypted.ciphertext, encrypted.iv, encrypted.salt, fingerprint, suffix, enabled,
+      label, group, encrypted.ciphertext, encrypted.iv, encrypted.salt, fingerprint, suffix, enabled,
       dates.startsAt, dates.expiresAt, dates.autoDelete ? 1 : 0, now, id,
     )];
     if (replacingKey) statements.push(this.env.DB.prepare("DELETE FROM usage_cache WHERE account_id = ?").bind(id));
     await this.env.DB.batch(statements);
     return {
-      id, label, maskedKey: `••••••••${suffix}`, enabled: Boolean(enabled),
+      id, label, group, maskedKey: `••••••••${suffix}`, enabled: Boolean(enabled),
       editable: true, source: "stored", createdAt: row.created_at, updatedAt: now, ...dates,
       lifecycleStatus: lifecycleStatus({ enabled: Boolean(enabled), ...dates }),
     };
@@ -288,7 +305,7 @@ export class AccountStore {
 
   async exportBackup() {
     if (!this.writable) throw new WorkerError("key_store_disabled", "Account management is disabled", 503);
-    const result = await this.env.DB.prepare(`SELECT id, label, key_ciphertext, key_iv, key_salt,
+    const result = await this.env.DB.prepare(`SELECT id, label, group_name, key_ciphertext, key_iv, key_salt,
       key_fingerprint, key_suffix, enabled, starts_at, expires_at, auto_delete, created_at, updated_at
       FROM accounts ORDER BY created_at ASC`).all();
     return {
@@ -318,7 +335,7 @@ export class AccountStore {
         expiresAt: account.expires_at,
         autoDelete: account.auto_delete === undefined ? false : Boolean(account.auto_delete),
       }, null, zonedDate(new Date(account.created_at)));
-      return { ...account, starts_at: dates.startsAt, expires_at: dates.expiresAt, auto_delete: dates.autoDelete ? 1 : 0 };
+      return { ...account, group_name: normalizeGroup(account.group_name), starts_at: dates.startsAt, expires_at: dates.expiresAt, auto_delete: dates.autoDelete ? 1 : 0 };
     });
     if (new Set(accounts.map((account) => account.id)).size !== accounts.length
       || new Set(accounts.map((account) => account.key_fingerprint)).size !== accounts.length) {
@@ -338,10 +355,10 @@ export class AccountStore {
       this.env.DB.prepare("DELETE FROM usage_cache"),
       this.env.DB.prepare("DELETE FROM accounts"),
       ...accounts.map((account) => this.env.DB.prepare(`INSERT INTO accounts (
-        id, label, key_ciphertext, key_iv, key_salt, key_fingerprint, key_suffix, enabled,
+        id, label, group_name, key_ciphertext, key_iv, key_salt, key_fingerprint, key_suffix, enabled,
         starts_at, expires_at, auto_delete, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
-        account.id, account.label, account.key_ciphertext, account.key_iv, account.key_salt,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+        account.id, account.label, account.group_name, account.key_ciphertext, account.key_iv, account.key_salt,
         account.key_fingerprint, account.key_suffix, Number(account.enabled), account.starts_at, account.expires_at,
         Number(account.auto_delete), account.created_at, account.updated_at,
       )),

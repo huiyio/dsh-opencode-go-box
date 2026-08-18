@@ -14,3 +14,4 @@ coverage/
 .DS_Store
 data/
 .local-runtime/
+worker-startup.cpuprofile

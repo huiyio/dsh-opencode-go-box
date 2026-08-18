@@ -5,6 +5,8 @@ const copy = {
     subtitle: "集中观测 Key 的额度、生命周期和真实模型探测结果。",
     addTitle: "录入 Key 资产",
     label: "账号名称",
+    group: "分组",
+    groupPlaceholder: "例如：订阅 1",
     apiKey: "API Key",
     add: "添加",
     accounts: "Key 资产节点",
@@ -89,7 +91,15 @@ const copy = {
     sourceLabel: "来源",
     visibleCount: "显示",
     filteredEmpty: "没有符合筛选条件的 Key 资产",
-    searchPlaceholder: "搜索账号或 Key 尾号",
+    searchPlaceholder: "搜索账号、分组或 Key 尾号",
+    allGroups: "全部分组",
+    ungrouped: "未分组",
+    customGroup: "自定义分组",
+    sort: "排序",
+    sortDefault: "默认顺序",
+    sortGroupAsc: "分组升序",
+    sortGroupDesc: "分组降序",
+    groupHeader: "{group} · {count} 个 Key",
     selectVisible: "全选当前结果",
     batchToolbar: "Key 批量操作",
     selectAccount: "选择账号 {label}",
@@ -123,6 +133,8 @@ const copy = {
     subtitle: "Observe quota windows, lifecycle, and real model probes for every key",
     addTitle: "Add key",
     label: "Account label",
+    group: "Group",
+    groupPlaceholder: "For example: Subscription 1",
     apiKey: "API key",
     add: "Add",
     accounts: "Accounts",
@@ -206,7 +218,15 @@ const copy = {
     sourceLabel: "Source",
     visibleCount: "Showing",
     filteredEmpty: "No key assets match this filter",
-    searchPlaceholder: "Search account or key suffix",
+    searchPlaceholder: "Search account, group, or key suffix",
+    allGroups: "All groups",
+    ungrouped: "Ungrouped",
+    customGroup: "custom group",
+    sort: "Sort",
+    sortDefault: "Default order",
+    sortGroupAsc: "Group ascending",
+    sortGroupDesc: "Group descending",
+    groupHeader: "{group} · {count} keys",
     selectVisible: "Select current results",
     batchToolbar: "Key batch actions",
     selectAccount: "Select account {label}",
@@ -242,6 +262,8 @@ const accountList = document.querySelector("#account-list");
 const accountCount = document.querySelector("#account-count");
 const accountSearch = document.querySelector("#account-search");
 const accountFilter = document.querySelector("#account-filter");
+const accountGroupFilter = document.querySelector("#account-group-filter");
+const accountSort = document.querySelector("#account-sort");
 const keyBatchToolbar = document.querySelector(".key-batch-toolbar");
 const selectVisibleAccounts = document.querySelector("#select-visible-accounts");
 const selectedAccountCount = document.querySelector("#selected-account-count");
@@ -260,7 +282,9 @@ const logoutButton = document.querySelector("#logout-button");
 const editDialog = document.querySelector("#edit-dialog");
 const editForm = document.querySelector("#edit-form");
 const editLabel = document.querySelector("#edit-label");
+const editGroup = document.querySelector("#edit-group");
 const editKey = document.querySelector("#edit-key");
+const accountGroup = document.querySelector("#account-group");
 const accountStartsAt = document.querySelector("#account-starts-at");
 const accountExpiresAt = document.querySelector("#account-expires-at");
 const accountAutoDelete = document.querySelector("#account-auto-delete");
@@ -354,6 +378,9 @@ function setLocale(nextLocale) {
   deleteSelectedAccountsButton.setAttribute("aria-label", t("batchDelete"));
   keyBatchToolbar.setAttribute("aria-label", t("batchToolbar"));
   if (accountSearch) accountSearch.placeholder = t("searchPlaceholder");
+  if (accountGroup) accountGroup.placeholder = t("groupPlaceholder");
+  if (editGroup) editGroup.placeholder = t("groupPlaceholder");
+  syncGroupFilterOptions();
   renderAccounts();
 }
 
@@ -589,6 +616,94 @@ function lifecycleDays(account) {
   return Math.max(0, Math.ceil((expiry - today) / 86400000));
 }
 
+function accountGroupValue(account) {
+  const group = typeof account?.group === "string" ? account.group.trim() : "";
+  return group || null;
+}
+
+function selectedGroupFilter() {
+  const option = accountGroupFilter?.selectedOptions?.[0];
+  if (!option || option.dataset.kind === "all") return { active: false, group: null };
+  if (option.dataset.kind === "ungrouped") return { active: true, group: null };
+  return { active: true, group: option.dataset.group || null };
+}
+
+function syncGroupFilterOptions() {
+  if (!accountGroupFilter) return;
+  const previous = accountGroupFilter.selectedOptions?.[0];
+  const previousKind = previous?.dataset.kind || "all";
+  const previousGroup = previous?.dataset.group || "";
+  const groups = [...new Set(accounts.map(accountGroupValue).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right, locale === "zh" ? "zh-CN" : "en", {
+      numeric: true,
+      sensitivity: "base",
+    }));
+  accountGroupFilter.replaceChildren();
+
+  const all = document.createElement("option");
+  all.value = "all";
+  all.dataset.kind = "all";
+  all.textContent = t("allGroups");
+  accountGroupFilter.append(all);
+
+  if (accounts.some((account) => accountGroupValue(account) === null)) {
+    const ungrouped = document.createElement("option");
+    ungrouped.value = "ungrouped";
+    ungrouped.dataset.kind = "ungrouped";
+    ungrouped.textContent = t("ungrouped");
+    accountGroupFilter.append(ungrouped);
+  }
+
+  groups.forEach((group, index) => {
+    const option = document.createElement("option");
+    option.value = `group-${index}`;
+    option.dataset.kind = "group";
+    option.dataset.group = group;
+    const conflictsWithUngroupedLabel = group.toLocaleLowerCase() === t("ungrouped").toLocaleLowerCase()
+      || group.toLocaleLowerCase() === "ungrouped";
+    option.textContent = conflictsWithUngroupedLabel
+      ? `${group} (${t("customGroup")})`
+      : group;
+    accountGroupFilter.append(option);
+  });
+
+  const matching = [...accountGroupFilter.options].find((option) => (
+    option.dataset.kind === previousKind
+      && (previousKind !== "group" || option.dataset.group === previousGroup)
+  ));
+  accountGroupFilter.value = matching?.value || "all";
+}
+
+function sortAccountsByGroup(visibleAccounts) {
+  const grouped = new Map();
+  for (const account of visibleAccounts) {
+    const group = accountGroupValue(account);
+    if (!grouped.has(group)) grouped.set(group, []);
+    grouped.get(group).push(account);
+  }
+  const order = [...grouped.keys()];
+  const mode = accountSort?.value || "default";
+  if (mode === "default") {
+    order.sort((left, right) => {
+      if (left === null) return right === null ? 0 : 1;
+      if (right === null) return -1;
+      return 0;
+    });
+  }
+  if (mode === "group-asc" || mode === "group-desc") {
+    const direction = mode === "group-asc" ? 1 : -1;
+    order.sort((left, right) => {
+      if (left === null) return right === null ? 0 : 1;
+      if (right === null) return -1;
+      return direction * left.localeCompare(right, locale === "zh" ? "zh-CN" : "en", {
+        numeric: true,
+        sensitivity: "base",
+      });
+    });
+  }
+  return order.flatMap((group) => grouped.get(group));
+}
+
 function lifecycleProgress(account) {
   const start = dateOnlyToUtc(account.startsAt);
   const expiry = dateOnlyToUtc(account.expiresAt);
@@ -611,8 +726,10 @@ function accountHasRisk(account) {
 
 function accountMatchesFilter(account) {
   const query = String(accountSearch?.value || "").trim().toLocaleLowerCase();
-  const haystack = `${account.label || ""} ${account.maskedKey || ""}`.toLocaleLowerCase();
+  const haystack = `${account.label || ""} ${accountGroupValue(account) || ""} ${account.maskedKey || ""}`.toLocaleLowerCase();
   if (query && !haystack.includes(query)) return false;
+  const groupFilter = selectedGroupFilter();
+  if (groupFilter.active && accountGroupValue(account) !== groupFilter.group) return false;
   const filter = accountFilter?.value || "all";
   const lifecycleState = lifecycleStateFor(account);
   if (filter === "active") return lifecycleState === "active";
@@ -803,7 +920,9 @@ function renderAccounts() {
   accountList.replaceChildren();
   updateKeySummary();
   pruneSelectedAccounts();
+  syncGroupFilterOptions();
   const visibleAccounts = accounts.filter(accountMatchesFilter);
+  const orderedAccounts = sortAccountsByGroup(visibleAccounts);
   updateBatchSelectionControls(visibleAccounts);
   accountCount.textContent = locale === "zh"
     ? `${t("accountCount")}：${accounts.length}`
@@ -817,7 +936,32 @@ function renderAccounts() {
     return;
   }
 
-  for (const account of visibleAccounts) {
+  const groupCounts = new Map();
+  for (const account of orderedAccounts) {
+    const group = accountGroupValue(account);
+    groupCounts.set(group, (groupCounts.get(group) || 0) + 1);
+  }
+  let currentGroup = Symbol("initial-group");
+  for (const account of orderedAccounts) {
+    const group = accountGroupValue(account);
+    if (group !== currentGroup) {
+      const groupHeader = document.createElement("div");
+      groupHeader.className = "account-group-header";
+      groupHeader.dataset.group = group || "ungrouped";
+      groupHeader.setAttribute("aria-label", interpolate("groupHeader", {
+        group: group || t("ungrouped"),
+        count: groupCounts.get(group) || 0,
+      }));
+      const groupTitle = document.createElement("strong");
+      groupTitle.textContent = group || t("ungrouped");
+      const groupCount = document.createElement("span");
+      groupCount.textContent = locale === "zh"
+        ? `${groupCounts.get(group) || 0} 个 Key`
+        : `${groupCounts.get(group) || 0} keys`;
+      groupHeader.append(groupTitle, groupCount);
+      accountList.append(groupHeader);
+      currentGroup = group;
+    }
     const row = document.createElement("article");
     const lifecycleState = lifecycleStateFor(account);
     row.className = "account-row key-node";
@@ -853,11 +997,18 @@ function renderAccounts() {
     label.textContent = account.label;
     const maskedKey = document.createElement("code");
     maskedKey.textContent = account.maskedKey;
+    const groupBadge = document.createElement("span");
+    groupBadge.className = "account-group-badge";
+    if (group) {
+      groupBadge.textContent = `${t("group")}: ${group}`;
+    } else {
+      groupBadge.hidden = true;
+    }
     const identityMeta = document.createElement("span");
     identityMeta.className = "identity-meta";
     const addedAt = formatAccountDate(account.createdAt);
     identityMeta.textContent = `${t("addedAt")}: ${addedAt || "--"}`;
-    identity.append(label, maskedKey, identityMeta);
+    identity.append(label, maskedKey, groupBadge, identityMeta);
     const source = document.createElement("span");
     source.className = "asset-source";
     source.textContent = `${t("sourceLabel")}: ${account.source === "environment" ? t("environment") : t("stored")}`;
@@ -1146,6 +1297,7 @@ function openEdit(account) {
   clearError();
   editingId = account.id;
   editLabel.value = account.label;
+  editGroup.value = accountGroupValue(account) || "";
   editKey.value = "";
   editEnabled.checked = account.enabled;
   editStartsAt.value = account.startsAt || "";
@@ -1258,6 +1410,7 @@ addForm.addEventListener("submit", async (event) => {
       body: JSON.stringify({
         label: formData.get("label"),
         key: formData.get("key"),
+        group: formData.get("group") || null,
         startsAt: accountStartsAt.value || null,
         expiresAt: accountExpiresAt.value || null,
         autoDelete: accountAutoDelete.checked,
@@ -1273,6 +1426,7 @@ editForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const changes = {
     label: editLabel.value,
+    group: editGroup.value.trim() || null,
     enabled: editEnabled.checked,
     startsAt: editStartsAt.value || null,
     expiresAt: editExpiresAt.value || null,
@@ -1332,6 +1486,8 @@ autoRefreshValue.addEventListener("change", applyAutoRefreshSetting);
 autoRefreshUnit.addEventListener("change", applyAutoRefreshSetting);
 accountSearch?.addEventListener("input", renderAccounts);
 accountFilter?.addEventListener("change", renderAccounts);
+accountGroupFilter?.addEventListener("change", renderAccounts);
+accountSort?.addEventListener("change", renderAccounts);
 
 const storedAutoRefresh = readAutoRefreshSetting();
 autoRefreshEnabled.checked = storedAutoRefresh.enabled;

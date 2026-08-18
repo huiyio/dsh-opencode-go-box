@@ -186,7 +186,7 @@ test("admin account API creates, updates, and deletes without returning secrets"
   const created = await fetch(`${baseUrl}/api/admin/accounts`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ label: "Team", key: "secret-key-abcdef" }),
+    body: JSON.stringify({ label: "Team", group: "Operations", key: "secret-key-abcdef" }),
   });
   assert.equal(created.status, 201);
   assert.equal((await created.text()).includes("secret-key-abcdef"), false);
@@ -212,7 +212,7 @@ test("admin account API creates, updates, and deletes without returning secrets"
   assert.equal(removed.status, 200);
   assert.deepEqual(calls, [
     ["list-models"],
-    ["add", { label: "Team", key: "secret-key-abcdef" }],
+    ["add", { label: "Team", group: "Operations", key: "secret-key-abcdef" }],
     ["test-model", "stored-1", "kimi-k3"],
     ["update", "stored-1", { enabled: false }],
     ["remove", "stored-1"],

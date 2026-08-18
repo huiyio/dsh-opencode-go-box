@@ -12,6 +12,7 @@ A standalone multi-account OpenCode Go quota dashboard deployable as either a Do
 ## Features
 
 - Add, edit, disable, and delete multiple OpenCode Go API keys at `/admin`.
+- Assign a persistent group to each key, filter by group, and sort group sections ascending or descending. Older keys without a group appear under `Ungrouped`.
 - Show remaining and used percentages plus reset times for each 5-hour, 7-day, and 30-day window.
 - Configure admin auto-refresh in seconds or minutes, persisted in the browser.
 - Select an official model before sending a minimal real request to test a key.
@@ -37,6 +38,12 @@ Each stored key can be configured in the admin page with:
 - `Delete automatically after one month`: calculates one calendar month from the start date and deletes the key plus its usage cache at expiry. January 31, for example, becomes the last day of February.
 
 Dates are stored as `YYYY-MM-DD` and evaluated in the `Asia/Shanghai` time zone. The Docker process and a Cloudflare Workers Cron both clean up every minute; platform scheduling can introduce a short delay. Existing accounts and older backups migrate with their original creation date as the start date and remain non-expiring with automatic deletion disabled. Automatic deletion is irreversible, so download an encrypted backup and retain the original `KEY_ENCRYPTION_SECRET` separately.
+
+## Key groups
+
+Enter a group name when adding or editing a key (up to 60 characters, without line breaks). Groups are stored in the Docker encrypted file or Workers D1 and survive page refreshes, container restarts, auto-refresh, and backup restore. The admin list provides an all-groups selector and three sort modes: default order (group sections with original order inside each group), group ascending, and group descending. Ungrouped keys remain last. The read-only environment key is never assigned to a group.
+
+When upgrading an existing Workers deployment, back up D1 and apply the new remote migration (`0006_account_groups.sql`) before deploying the new code; old rows are treated as `Ungrouped`.
 
 ## Users and permissions
 

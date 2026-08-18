@@ -8,6 +8,7 @@ function environmentAccount(apiKey) {
   return {
     id: ENVIRONMENT_ACCOUNT_ID,
     label: "Environment key",
+    group: null,
     maskedKey: `••••••••${apiKey.slice(-4)}`,
     enabled: true,
     editable: false,
